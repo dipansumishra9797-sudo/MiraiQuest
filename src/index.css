@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  html {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  html.light {
+    background-color: #f8fafc;
+    color: #0f172a;
+  }
+
+  html.dark {
+    background-color: #020617;
+    color: #f8fafc;
+  }
+  
+  /* Tabular numbers for all stats and tables */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+

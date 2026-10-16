@@ -1,0 +1,192 @@
+import React, { useState } from 'react';
+import { useApp } from '../../store/appStore';
+import { Crown, Sparkles, CheckCircle2, ChevronRight, X, Clock, Flame } from 'lucide-react';
+
+interface BossBattleModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export const BossBattleModal: React.FC<BossBattleModalProps> = ({ isOpen, onClose }) => {
+  const { activeStudent, triggerXpEvent, triggerConfetti } = useApp();
+  const [currentStage, setCurrentStage] = useState(0);
+  const [selectedOpt, setSelectedOpt] = useState<number | null>(null);
+  const [isAnswered, setIsAnswered] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
+
+  if (!isOpen) return null;
+
+  const bossStages = [
+    {
+      title: 'Stage 1: Asymptotic Invariant Check',
+      prompt: 'Which master theorem case applies to T(n) = 3T(n/4) + n log n?',
+      options: ['Case 1: n^(log_4(3)) dominates', 'Case 3: f(n) = n log n dominates asymptotically (Theta(n log n))', 'Case 2: Exact logarithmic resonance', 'Master theorem fails to apply'],
+      correctIndex: 1,
+      explanation: 'log_4(3) approx 0.792, while n log n grows strictly faster by a polynomial factor n^(1 - 0.792) = n^(0.208). Hence Case 3 applies.',
+    },
+    {
+      title: 'Stage 2: Monotonic Stack Boundary',
+      prompt: 'In Largest Rectangle in Histogram, when do you pop an element from the stack?',
+      options: ['When current bar height is strictly greater than stack top', 'When current bar height is strictly less than stack top', 'When stack size exceeds 10 elements', 'On every alternating step'],
+      correctIndex: 1,
+      explanation: 'A shorter bar limits the right boundary of the rectangle that the taller bar could extend to, requiring stack resolution.',
+    },
+    {
+      title: 'Stage 3: Graph Shortest Path Failure Modes',
+      prompt: 'Under what specific condition does standard Dijkstra algorithm with priority queue fail?',
+      options: ['Disconnected graphs', 'Directed acyclic graphs', 'Graphs with any negative edge weights', 'Graphs with odd cycle counts'],
+      correctIndex: 2,
+      explanation: 'Dijkstra greedy invariant assumes visited vertices have finalized minimal distances, which is invalidated if negative edges decrease costs later.',
+    },
+    {
+      title: 'Stage 4: Python Dunder Resolution',
+      prompt: 'When evaluating "x in obj", what is the primary dunder method Python seeks before falling back to __iter__?',
+      options: ['__contains__', '__has__', '__in__', '__lookup__'],
+      correctIndex: 0,
+      explanation: 'Python first invokes obj.__contains__(x). If undefined, it falls back to iterative sequence searching via __iter__ and __getitem__.',
+    },
+    {
+      title: 'Stage 5: Final Boss Algorithmic Synthesis',
+      prompt: 'In dynamic programming, what two structural properties are strictly necessary for optimal substructure to guarantee polynomial optimality?',
+      options: ['Linear memory and recursion', 'Overlapping subproblems and optimal substructure', 'Sorting and binary partition', 'Greedy choice and tree structures'],
+      correctIndex: 1,
+      explanation: 'Optimal substructure ensures optimal subproblem solutions compose into optimal global solutions, while overlapping subproblems make memoization advantageous.',
+    },
+  ];
+
+  const current = bossStages[currentStage];
+
+  const handleSelect = (idx: number) => {
+    if (isAnswered) return;
+    setSelectedOpt(idx);
+    setIsAnswered(true);
+  };
+
+  const handleNext = () => {
+    if (currentStage + 1 < bossStages.length) {
+      setCurrentStage((prev) => prev + 1);
+      setSelectedOpt(null);
+      setIsAnswered(false);
+    } else {
+      // Completed all stages! Award 100 XP
+      triggerXpEvent({
+        eventId: `ev_boss_${Date.now()}`,
+        studentId: activeStudent.id,
+        actionKey: 'boss_battle',
+        timestamp: new Date().toISOString(),
+        metadata: {
+          battleTitle: 'Pre-Exam Algorithmic Boss Gauntlet',
+        },
+      });
+      triggerConfetti();
+      setIsCompleted(true);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+      <div className="relative w-full max-w-xl bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
+          <div className="flex items-center gap-2">
+            <Crown className="w-5 h-5 text-amber-400" />
+            <div>
+              <div className="font-bold text-white text-sm">MID-TERM BOSS GAUNTLET</div>
+              <div className="text-[11px] text-slate-400">Timed Revision Challenge · 100 XP Prize</div>
+            </div>
+          </div>
+
+          <button onClick={onClose} className="text-slate-400 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {!isCompleted ? (
+          <div>
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+              <span className="text-amber-400 font-semibold">{current.title}</span>
+              <span className="tabular-nums">Stage {currentStage + 1} of {bossStages.length}</span>
+            </div>
+
+            <h4 className="text-base font-semibold text-white mb-4 leading-snug">
+              {current.prompt}
+            </h4>
+
+            <div className="space-y-2.5 mb-6">
+              {current.options.map((opt, idx) => {
+                let style = 'bg-slate-950 border-slate-800 text-slate-200 hover:border-slate-700';
+                if (isAnswered) {
+                  if (idx === current.correctIndex) {
+                    style = 'bg-emerald-500/10 border-emerald-500 text-emerald-300 font-semibold';
+                  } else if (idx === selectedOpt) {
+                    style = 'bg-rose-500/10 border-rose-500 text-rose-300';
+                  } else {
+                    style = 'bg-slate-950/40 border-slate-900 text-slate-500 opacity-60';
+                  }
+                }
+
+                return (
+                  <button
+                    key={idx}
+                    disabled={isAnswered}
+                    onClick={() => handleSelect(idx)}
+                    className={`w-full text-left p-3 rounded-xl border text-xs sm:text-sm flex items-center justify-between transition-colors ${style}`}
+                  >
+                    <span>{opt}</span>
+                    {isAnswered && idx === current.correctIndex && (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 ml-2" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {isAnswered && (
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 mb-4 leading-relaxed">
+                <span className="font-semibold text-white">Explanation: </span>
+                {current.explanation}
+              </div>
+            )}
+
+            {isAnswered && (
+              <div className="flex justify-end">
+                <button
+                  onClick={handleNext}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold"
+                >
+                  <span>{currentStage + 1 < bossStages.length ? 'Next Stage' : 'Finish Gauntlet'}</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-6">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto mb-4">
+              <Crown className="w-8 h-8" />
+            </div>
+
+            <h4 className="text-xl font-bold text-white mb-1">Gauntlet Conquered!</h4>
+            <p className="text-slate-300 text-xs mb-4">
+              You synthesized and verified all core algorithmic invariants before exams!
+            </p>
+
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-center max-w-xs mx-auto mb-6">
+              <div className="text-xs text-slate-400">Total Reward</div>
+              <div className="text-3xl font-extrabold text-emerald-400 tabular-nums">+100 XP</div>
+              <div className="text-[11px] text-amber-400 font-semibold mt-1">
+                Unlocked "Gauntlet Conqueror" Badge
+              </div>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

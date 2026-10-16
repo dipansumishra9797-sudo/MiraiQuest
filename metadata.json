@@ -1,0 +1,6 @@
+{
+  "name": "MiraiQuest - MSOT Gamified Learning Platform",
+  "description": "Gamified learning platform for MSOT campuses turning attendance, assignments, tests, and coding practice into fair, engaging quests, streaks, leagues, and team battles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
