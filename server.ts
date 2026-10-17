@@ -679,6 +679,270 @@ You may assume that you have an infinite number of each kind of coin.`,
   });
 });
 
+// In-memory accept tracking to detect repeated collusion patterns
+const peerAcceptHistory: { askerId: string; helperId: string; timestamp: number }[] = [];
+const phoneOtpStore: Record<string, { newPhone: string; otp: string; expiresAt: number }> = {};
+
+// 5. Peer Doubts: Accept Answer Backend Verification
+app.post('/api/peer-doubts/accept-answer', (req: Request, res: Response) => {
+  const {
+    doubtId,
+    answerId,
+    callerId,
+    callerRole,
+    doubtOwnerId,
+    doubtTitle,
+    answerAuthorId,
+    answerAuthorName,
+    isAlreadyLocked,
+    helperTodayAcceptedCount = 0,
+  } = req.body;
+
+  if (!doubtId || !answerId || !callerId) {
+    return res.status(400).json({ error: 'Missing required parameters: doubtId, answerId, callerId.' });
+  }
+
+  // Rule 1: Only the asker who posted the doubt (or faculty override) can accept
+  const isOwner = callerId === doubtOwnerId;
+  const isFaculty = callerRole === 'faculty' || callerRole === 'admin';
+  if (!isOwner && !isFaculty) {
+    return res.status(403).json({
+      error: 'Permission denied: Only the student who asked this doubt (the asker) or faculty can accept an answer.',
+    });
+  }
+
+  // Rule 2: No XP for answering your own doubt, and the asker cannot accept their own answer
+  if (answerAuthorId === doubtOwnerId) {
+    return res.status(400).json({
+      error: 'Invalid action: The asker cannot accept their own answer, and no XP can be earned for self-answers.',
+    });
+  }
+
+  // Rule 3: Choice locking once XP is awarded
+  if (isAlreadyLocked) {
+    return res.status(400).json({
+      error: 'Locked: This doubt already has an accepted answer awarded with XP. The choice is permanently locked.',
+    });
+  }
+
+  // Rule 4: Helper reward cap (15 XP per accepted answer, max 3 rewarded per day per helper)
+  const isCapped = helperTodayAcceptedCount >= 3;
+  const xpToAward = isCapped ? 0 : 15;
+
+  // Track collusion / repeated accept patterns between same two accounts
+  peerAcceptHistory.push({
+    askerId: doubtOwnerId,
+    helperId: answerAuthorId,
+    timestamp: Date.now(),
+  });
+
+  // Check last 7 days accepts between this specific pair
+  const recentWindowMs = 7 * 24 * 60 * 60 * 1000;
+  const pairAccepts = peerAcceptHistory.filter(
+    (h) =>
+      Date.now() - h.timestamp < recentWindowMs &&
+      ((h.askerId === doubtOwnerId && h.helperId === answerAuthorId) ||
+        (h.askerId === answerAuthorId && h.helperId === doubtOwnerId))
+  );
+
+  let collusionFlag = null;
+  if (pairAccepts.length >= 3) {
+    collusionFlag = {
+      id: `flag_peer_collusion_${Date.now()}`,
+      studentId: answerAuthorId,
+      studentName: answerAuthorName || 'Student',
+      campus: 'HI-Tech',
+      timestamp: new Date().toISOString(),
+      reason: 'Collusion detected: Repeated reciprocal accept pattern between students',
+      severity: 'high',
+      details: `Student ${doubtOwnerId} and ${answerAuthorId} have exchanged ${pairAccepts.length} accepted answers within 7 days, indicating potential point-farming collusion.`,
+      suggestedAction: 'Audit recent peer doubt interactions and void suspicious ledger entries.',
+      status: 'pending',
+    };
+  }
+
+  // Generate in-app notification for helper
+  const helperNotification = {
+    id: `notif_accept_${Date.now()}`,
+    userId: answerAuthorId,
+    title: 'Answer Accepted! (+15 XP)',
+    message: `Your answer on "${doubtTitle || 'Peer Doubt'}" was accepted by the asker! ${
+      xpToAward > 0 ? `+${xpToAward} XP awarded to your ledger.` : 'Daily XP cap reached (3/day).'
+    }`,
+    type: 'peer_accept',
+    timestamp: new Date().toISOString(),
+    read: false,
+    link: `/peer-help#post_${doubtId}`,
+  };
+
+  return res.json({
+    success: true,
+    pointsAwarded: xpToAward,
+    isCapped,
+    isLocked: true,
+    notification: helperNotification,
+    collusionFlag,
+    ledgerMetadata: {
+      actionKey: 'peer_help',
+      actionType: 'peer_help',
+      sourceDescription: `Accepted Peer Help Answer on doubt: "${doubtTitle || 'Technical Doubt'}"`,
+      verificationMetadata: {
+        doubtId,
+        doubtUrl: `/peer-help#post_${doubtId}`,
+        askerId: doubtOwnerId,
+        acceptedAt: new Date().toISOString(),
+      },
+    },
+  });
+});
+
+// 6. Batchmates API: ONLY returns classmates with same campus, year, section
+app.get('/api/students/:id/batchmates', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const requestingStudentId = req.query.requestingStudentId as string;
+  const campus = req.query.campus as string;
+  const year = req.query.year as string;
+  const section = req.query.section as string;
+
+  // Strict backend security: Only the student themselves (or faculty) can request their batchmates
+  if (requestingStudentId && requestingStudentId !== id) {
+    return res.status(403).json({
+      error: 'Access Refused: You may only view batchmates for your own verified campus, year, and section.',
+    });
+  }
+
+  return res.json({
+    success: true,
+    scope: { campus, year, section },
+    message: 'Authorized to view batchmates for matching campus, year, and section.',
+  });
+});
+
+// 7. Student Profile Update: Enforce MSOT Read-Only fields on Backend
+app.put('/api/students/:id/profile', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const callerId = req.body.callerId || id;
+  const callerRole = req.body.callerRole || 'student';
+  const attemptedUpdates = req.body.attemptedUpdates || { ...req.body };
+  delete attemptedUpdates.callerId;
+  delete attemptedUpdates.callerRole;
+
+  // Authorization check
+  if (callerRole !== 'admin' && callerId !== id) {
+    return res.status(403).json({ error: 'Permission denied: You can only edit your own profile.' });
+  }
+
+  // MSOT Managed Fields Lock: Students CANNOT alter campus, year, section, or rollNumber
+  if (callerRole !== 'admin') {
+    const forbiddenFields = ['campus', 'year', 'section', 'rollNumber'];
+    const violatedFields = forbiddenFields.filter((f) => attemptedUpdates[f] !== undefined);
+
+    if (violatedFields.length > 0) {
+      return res.status(403).json({
+        error: `Managed by MSOT Registrar: [${violatedFields.join(', ')}] are read-only official records and can only be modified by university administration.`,
+      });
+    }
+  }
+
+  // Bio validation (max 200 characters)
+  if (attemptedUpdates.bio && attemptedUpdates.bio.length > 200) {
+    return res.status(400).json({ error: 'Bio exceeds maximum limit of 200 characters.' });
+  }
+
+  // URL validation for social links
+  const urlPattern = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/i;
+  if (attemptedUpdates.socialLinks) {
+    for (const [key, val] of Object.entries(attemptedUpdates.socialLinks)) {
+      if (val && typeof val === 'string' && val.trim().length > 0) {
+        if (!urlPattern.test(val.trim())) {
+          return res.status(400).json({ error: `Invalid URL format for ${key}: "${val}"` });
+        }
+      }
+    }
+  }
+
+  return res.json({
+    success: true,
+    message: 'Profile updated successfully.',
+    updatedFields: attemptedUpdates,
+  });
+});
+
+// 8. Request Phone Change OTP (Login Identity Protection)
+app.post('/api/students/:id/request-phone-otp', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const callerId = req.body.callerId || id;
+  const { newPhoneNumber } = req.body;
+
+  if (callerId !== id) {
+    return res.status(403).json({ error: 'Cannot request phone change for another account.' });
+  }
+
+  if (!newPhoneNumber || !newPhoneNumber.trim()) {
+    return res.status(400).json({ error: 'New phone number is required.' });
+  }
+
+  // Generate 6-digit OTP (mock OTP 729410 for instant testing)
+  const otp = '729410';
+  phoneOtpStore[id] = {
+    newPhone: newPhoneNumber.trim(),
+    otp,
+    expiresAt: Date.now() + 10 * 60 * 1000,
+  };
+
+  return res.json({
+    success: true,
+    message: `Verification OTP dispatched to ${newPhoneNumber}. Enter code to verify identity change.`,
+    mockOtp: otp,
+    demoOtp: otp,
+  });
+});
+
+// 9. Verify Phone Change OTP
+app.post('/api/students/:id/verify-phone-otp', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const callerId = req.body.callerId || id;
+  const { otp } = req.body;
+
+  if (callerId !== id) {
+    return res.status(403).json({ error: 'Unauthorized phone verification request.' });
+  }
+
+  const record = phoneOtpStore[id];
+  if (!record || Date.now() > record.expiresAt) {
+    return res.status(400).json({ error: 'OTP expired or not requested. Please request a new code.' });
+  }
+
+  if (record.otp !== otp?.trim()) {
+    return res.status(400).json({ error: 'Invalid verification OTP. Please check and try again.' });
+  }
+
+  const updatedPhone = record.newPhone;
+  delete phoneOtpStore[id];
+
+  return res.json({
+    success: true,
+    message: 'Phone number verified and updated successfully.',
+    newPhoneNumber: updatedPhone,
+  });
+});
+
+// 10. Faculty / Admin Profile Update
+app.put('/api/faculty/:id/profile', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { callerId, updates = {} } = req.body;
+
+  if (callerId !== id) {
+    return res.status(403).json({ error: 'Unauthorized to edit this faculty profile.' });
+  }
+
+  return res.json({
+    success: true,
+    message: 'Faculty profile updated successfully.',
+    updates,
+  });
+});
+
 // Vite or Static Serving
 async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';
@@ -698,7 +962,7 @@ async function startServer() {
   }
 
   app.listen(PORT, () => {
-    console.log(`LevelUp server listening on http://localhost:${PORT}`);
+    console.log(`MiraiQuest server listening on http://localhost:${PORT}`);
   });
 }
 

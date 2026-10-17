@@ -14,13 +14,11 @@ import {
   Medal,
   Award,
   Sparkles,
-  ChevronDown,
-  ChevronUp,
   Calendar,
 } from 'lucide-react';
 
 export const TeamBattlesView: React.FC = () => {
-  const { battles, simulateBatchSubmissions, activeStudent, triggerXpEvent } = useApp();
+  const { battles, simulateBatchSubmissions, activeStudent, triggerXpEvent, isDark } = useApp();
   const [simulationMetrics, setSimulationMetrics] = useState<{
     totalSubmitted: number;
     processed: number;
@@ -36,7 +34,6 @@ export const TeamBattlesView: React.FC = () => {
   };
 
   const handleQuickSubmitSolution = () => {
-    // Quick test submission for active student's campus
     triggerXpEvent({
       eventId: `ev_battle_${Date.now()}`,
       studentId: activeStudent.id,
@@ -50,33 +47,47 @@ export const TeamBattlesView: React.FC = () => {
     });
   };
 
-  // Find leading score to normalize visual bar width
   const maxScore = Math.max(...activeBattle.teams.map((t) => t.normalizedScore), 1);
+
+  const cardBg = isDark
+    ? 'bg-slate-900 border-slate-800 text-white'
+    : 'bg-white border-slate-200 text-slate-900 shadow-xs';
+  const subCardBg = isDark
+    ? 'bg-slate-950 border-slate-800'
+    : 'bg-slate-50 border-slate-200';
 
   return (
     <div className="space-y-6">
       {/* Hero Battle Banner */}
-      <div className="relative p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 overflow-hidden">
+      <div className={`relative p-6 rounded-2xl border overflow-hidden transition-colors ${
+        isDark
+          ? 'bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border-slate-800 text-white'
+          : 'bg-gradient-to-r from-indigo-50/90 via-purple-50/50 to-white border-indigo-100 text-slate-900 shadow-xs'
+      }`}>
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="max-w-xl">
-            <div className="flex items-center gap-2 text-xs text-indigo-400 font-semibold mb-2">
-              <Swords className="w-4 h-4 text-amber-400" />
+            <div className="flex items-center gap-2 text-xs text-indigo-500 font-semibold mb-2">
+              <Swords className="w-4 h-4 text-amber-500" />
               <span>COLLEGIATE TEAM BATTLE · LIVE</span>
             </div>
-            <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
+            <h3 className="text-xl sm:text-2xl font-bold mb-2">
               {activeBattle.title}
             </h3>
-            <p className="text-slate-300 text-xs sm:text-sm leading-relaxed mb-4">
+            <p className={`text-xs sm:text-sm leading-relaxed mb-4 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
               {activeBattle.description}
             </p>
 
             {/* Normalization Formula Callout */}
-            <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 text-[11px] text-slate-300 space-y-1">
-              <div className="font-semibold text-white flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <div className={`p-3 rounded-xl border text-[11px] space-y-1 ${
+              isDark
+                ? 'bg-slate-950/80 border-slate-800/80 text-slate-300'
+                : 'bg-white/90 border-slate-200 text-slate-600'
+            }`}>
+              <div className="font-semibold flex items-center gap-1.5 text-indigo-500">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
                 <span>Fair Normalization Formula</span>
               </div>
-              <p className="text-slate-400 leading-normal">
+              <p className={`leading-normal ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 {activeBattle.normalizationFormulaDescription}
               </p>
             </div>
@@ -86,7 +97,7 @@ export const TeamBattlesView: React.FC = () => {
           <div className="flex flex-col gap-3 shrink-0">
             <button
               onClick={handleQuickSubmitSolution}
-              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20"
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-2 shadow-xs"
             >
               <Zap className="w-3.5 h-3.5" />
               <span>Submit Solution for {activeStudent.campus} (+20 XP)</span>
@@ -95,9 +106,13 @@ export const TeamBattlesView: React.FC = () => {
             {/* Concurrency Stress Test Button */}
             <button
               onClick={handleSimulateStressTest}
-              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-colors flex items-center justify-center gap-2"
+              className={`px-4 py-2.5 rounded-xl font-semibold text-xs border transition-colors flex items-center justify-center gap-2 ${
+                isDark
+                  ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300 shadow-xs'
+              }`}
             >
-              <Cpu className="w-3.5 h-3.5 text-amber-400" />
+              <Cpu className="w-3.5 h-3.5 text-amber-500" />
               <span>Simulate 300 Students Submitting at Once</span>
             </button>
           </div>
@@ -106,37 +121,41 @@ export const TeamBattlesView: React.FC = () => {
 
       {/* 300-Student Concurrency Results Panel */}
       {simulationMetrics && (
-        <div className="p-4 rounded-xl bg-slate-900 border border-indigo-500/30 space-y-3 animate-in fade-in duration-150">
+        <div className={`p-4 rounded-xl border space-y-3 transition-colors ${
+          isDark
+            ? 'bg-slate-900 border-indigo-500/30 text-white'
+            : 'bg-indigo-50/70 border-indigo-200 text-slate-900 shadow-xs'
+        }`}>
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-300">
-              <Activity className="w-4 h-4 text-emerald-400" />
+            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-500">
+              <Activity className="w-4 h-4 text-emerald-500" />
               <span>High-Concurrency Stress Test Result (300 Concurrent Submissions)</span>
             </div>
-            <button onClick={() => setSimulationMetrics(null)} className="text-slate-400 hover:text-white text-xs">
+            <button onClick={() => setSimulationMetrics(null)} className={`text-xs ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`}>
               Close
             </button>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-              <div className="text-[10px] text-slate-400">Total Inbound</div>
-              <div className="text-lg font-bold text-white tabular-nums">{simulationMetrics.totalSubmitted}</div>
+            <div className={`p-2.5 rounded-lg border ${subCardBg}`}>
+              <div className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Total Inbound</div>
+              <div className="text-lg font-bold tabular-nums">{simulationMetrics.totalSubmitted}</div>
             </div>
-            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-              <div className="text-[10px] text-slate-400">Processed (Zero Loss)</div>
-              <div className="text-lg font-bold text-emerald-400 tabular-nums">{simulationMetrics.processed}</div>
+            <div className={`p-2.5 rounded-lg border ${subCardBg}`}>
+              <div className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Processed (Zero Loss)</div>
+              <div className="text-lg font-bold text-emerald-500 tabular-nums">{simulationMetrics.processed}</div>
             </div>
-            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-              <div className="text-[10px] text-slate-400">Idempotency Filtered</div>
-              <div className="text-lg font-bold text-amber-400 tabular-nums">{simulationMetrics.duplicatesRejected}</div>
+            <div className={`p-2.5 rounded-lg border ${subCardBg}`}>
+              <div className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Idempotency Filtered</div>
+              <div className="text-lg font-bold text-amber-500 tabular-nums">{simulationMetrics.duplicatesRejected}</div>
             </div>
-            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-              <div className="text-[10px] text-slate-400">p95 Queue Latency</div>
-              <div className="text-lg font-bold text-indigo-400 tabular-nums">{simulationMetrics.p95LatencyMs} ms</div>
+            <div className={`p-2.5 rounded-lg border ${subCardBg}`}>
+              <div className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>p95 Queue Latency</div>
+              <div className="text-lg font-bold text-indigo-500 tabular-nums">{simulationMetrics.p95LatencyMs} ms</div>
             </div>
           </div>
 
-          <div className="text-[11px] text-slate-400">
+          <div className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
             Engine verified: Idempotency keys prevent duplicate credit. Submissions streamed and normalized across 4 campus standings in under 100ms.
           </div>
         </div>
@@ -145,12 +164,12 @@ export const TeamBattlesView: React.FC = () => {
       {/* Live Scoreboard */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Score Bars (2 Columns) */}
-        <div className="lg:col-span-2 space-y-4 p-5 rounded-2xl bg-slate-900 border border-slate-800">
+        <div className={`lg:col-span-2 space-y-4 p-5 rounded-2xl border transition-colors ${cardBg}`}>
           <div className="flex items-center justify-between mb-2">
-            <div className="text-xs font-bold text-white uppercase tracking-wider">
+            <div className="text-xs font-bold uppercase tracking-wider">
               Live Campus Standings (Normalized Score)
             </div>
-            <span className="text-[11px] text-slate-400">Live feed · 2s refresh</span>
+            <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Live feed · 2s refresh</span>
           </div>
 
           <div className="space-y-4">
@@ -164,34 +183,36 @@ export const TeamBattlesView: React.FC = () => {
                   <div key={team.teamId} className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
-                        <span className="w-5 text-center font-bold text-slate-400">#{idx + 1}</span>
-                        <span className="font-semibold text-white">{team.teamName}</span>
+                        <span className={`w-5 text-center font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>#{idx + 1}</span>
+                        <span className="font-semibold">{team.teamName}</span>
                         {isUserCampus && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 font-bold">
                             YOUR CAMPUS
                           </span>
                         )}
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <span className="text-slate-400 text-[11px]">
+                        <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                           {team.participantCount}/{team.eligibleStudentCount} Students · {team.totalRawXp} Raw XP
                         </span>
-                        <span className="text-emerald-400 font-bold tabular-nums text-sm">
+                        <span className="text-emerald-600 dark:text-emerald-400 font-bold tabular-nums text-sm">
                           {team.normalizedScore} pts
                         </span>
                       </div>
                     </div>
 
                     {/* Animated Progress Bar */}
-                    <div className="w-full h-3 rounded-full bg-slate-950 overflow-hidden p-0.5 border border-slate-800">
+                    <div className={`w-full h-3 rounded-full overflow-hidden p-0.5 border ${
+                      isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
+                    }`}>
                       <div
                         className={`h-full rounded-full transition-all duration-700 ${
                           idx === 0
-                            ? 'bg-amber-400 shadow-sm shadow-amber-400/30'
+                            ? 'bg-amber-400 shadow-xs'
                             : idx === 1
                             ? 'bg-indigo-500'
-                            : 'bg-slate-600'
+                            : isDark ? 'bg-slate-600' : 'bg-slate-400'
                         }`}
                         style={{ width: `${widthPercent}%` }}
                       />
@@ -203,30 +224,30 @@ export const TeamBattlesView: React.FC = () => {
         </div>
 
         {/* Recent Submissions Feed (1 Column) */}
-        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col">
+        <div className={`p-5 rounded-2xl border flex flex-col transition-colors ${cardBg}`}>
           <div className="flex items-center justify-between mb-4">
-            <span className="text-xs font-bold text-white uppercase tracking-wider">
+            <span className="text-xs font-bold uppercase tracking-wider">
               Recent Battle Solves
             </span>
-            <span className="text-[10px] text-slate-400">Streamed</span>
+            <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Streamed</span>
           </div>
 
           <div className="space-y-3 overflow-y-auto max-h-[300px] flex-1">
             {activeBattle.recentSubmissions.map((sub) => (
               <div
                 key={sub.id}
-                className="p-2.5 rounded-xl bg-slate-950 border border-slate-800/80 text-xs flex items-center justify-between"
+                className={`p-2.5 rounded-xl border text-xs flex items-center justify-between transition-colors ${subCardBg}`}
               >
                 <div>
-                  <div className="text-white font-medium">{sub.studentName}</div>
-                  <div className="text-[11px] text-slate-400 truncate max-w-[160px]">
+                  <div className="font-medium">{sub.studentName}</div>
+                  <div className={`text-[11px] truncate max-w-[160px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                     {sub.problemTitle}
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">{sub.timestamp}</div>
+                  <div className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{sub.timestamp}</div>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-emerald-400 font-bold tabular-nums">+{sub.points} XP</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold tabular-nums">+{sub.points} XP</span>
                 </div>
               </div>
             ))}
@@ -235,22 +256,26 @@ export const TeamBattlesView: React.FC = () => {
       </div>
 
       {/* Recent Team Battles Summary Widget */}
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800/80">
+      <div className={`p-6 rounded-2xl border space-y-6 transition-colors ${cardBg}`}>
+        <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b ${isDark ? 'border-slate-800/80' : 'border-slate-200'}`}>
           <div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 mb-1">
-              <Trophy className="w-4 h-4 text-amber-400" />
+            <div className="flex items-center gap-2 text-xs font-semibold text-amber-500 mb-1">
+              <Trophy className="w-4 h-4" />
               <span>MATCH ARCHIVES · LAST THREE CONTESTS</span>
             </div>
-            <h3 className="text-lg font-bold text-white">Recent Team Battles Summary</h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <h3 className="text-lg font-bold">Recent Team Battles Summary</h3>
+            <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               Verified outcomes, collective team XP distributions, and official MVP titles awarded to exceptional contributors.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 font-medium flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+            <span className={`text-[11px] px-2.5 py-1 rounded-lg border font-medium flex items-center gap-1.5 ${
+              isDark
+                ? 'bg-slate-950 border-slate-800 text-slate-300'
+                : 'bg-slate-100 border-slate-200 text-slate-700'
+            }`}>
+              <Calendar className="w-3.5 h-3.5 text-indigo-500" />
               <span>3 Matches Completed</span>
             </span>
           </div>
@@ -258,87 +283,93 @@ export const TeamBattlesView: React.FC = () => {
 
         {/* 3 Matches Summary Cards Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {PAST_BATTLE_MATCHES.map((match, idx) => {
-            const isWinnerSelected = match.winnerTeam.campusOrSection.includes(activeStudent.campus) ||
-              match.winnerTeam.campusOrSection.includes(activeStudent.section);
+          {PAST_BATTLE_MATCHES.map((match) => {
             const totalScore = match.winnerTeam.score + match.runnerUpTeam.score;
             const winnerWidthPercent = Math.round((match.winnerTeam.score / totalScore) * 100);
 
             return (
               <div
                 key={match.id}
-                className="p-5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col justify-between space-y-5 hover:border-slate-700 transition-colors"
+                className={`p-5 rounded-2xl border flex flex-col justify-between space-y-5 transition-colors ${subCardBg}`}
               >
                 {/* Match Header */}
                 <div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2">
-                    <span className="text-indigo-400 font-semibold">{match.date}</span>
+                  <div className={`flex items-center justify-between text-[11px] mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <span className="text-indigo-500 font-semibold">{match.date}</span>
                     <span className="capitalize">
                       {match.type === 'campus_vs_campus' ? 'Campus vs Campus' : 'Section vs Section'}
                     </span>
                   </div>
 
-                  <h4 className="text-sm font-bold text-white leading-snug mb-1">
+                  <h4 className="text-sm font-bold leading-snug mb-1">
                     {match.title}
                   </h4>
 
-                  <div className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5" />
                     <span>+{match.totalXpPoolAwarded.toLocaleString()} Total XP Pool Distributed</span>
                   </div>
                 </div>
 
                 {/* Scoreboard Showdown */}
-                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800/90 space-y-2.5">
+                <div className={`p-3.5 rounded-xl border space-y-2.5 ${
+                  isDark ? 'bg-slate-900 border-slate-800/90' : 'bg-white border-slate-200'
+                }`}>
                   <div className="flex items-center justify-between text-xs">
                     {/* Winner */}
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-md bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                      <div className="w-6 h-6 rounded-md bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500 shrink-0">
                         <Crown className="w-3.5 h-3.5" />
                       </div>
                       <div>
-                        <div className="font-bold text-white text-xs flex items-center gap-1">
+                        <div className="font-bold text-xs flex items-center gap-1">
                           <span>{match.winnerTeam.name}</span>
-                          <span className="text-[10px] text-emerald-400 font-semibold">WINNER</span>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">WINNER</span>
                         </div>
-                        <div className="text-[10px] text-slate-400">
+                        <div className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                           {match.winnerTeam.campusOrSection} · +{match.winnerXpBonusPerStudent} XP team bonus
                         </div>
                       </div>
                     </div>
-                    <span className="text-sm font-extrabold text-amber-400 tabular-nums">
+                    <span className="text-sm font-extrabold text-amber-500 tabular-nums">
                       {match.winnerTeam.score} pts
                     </span>
                   </div>
 
                   {/* Relative Score Bar */}
-                  <div className="w-full h-1.5 rounded-full bg-slate-950 overflow-hidden flex">
+                  <div className={`w-full h-1.5 rounded-full overflow-hidden flex ${
+                    isDark ? 'bg-slate-950' : 'bg-slate-200'
+                  }`}>
                     <div
                       className="h-full bg-amber-400"
                       style={{ width: `${winnerWidthPercent}%` }}
                     />
                     <div
-                      className="h-full bg-slate-700"
+                      className={`h-full ${isDark ? 'bg-slate-700' : 'bg-slate-300'}`}
                       style={{ width: `${100 - winnerWidthPercent}%` }}
                     />
                   </div>
 
                   {/* Runner Up */}
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/60">
+                  <div className={`flex items-center justify-between text-xs pt-1 border-t ${
+                    isDark ? 'border-slate-800/60' : 'border-slate-200'
+                  }`}>
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-md bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 shrink-0">
+                      <div className={`w-6 h-6 rounded-md border flex items-center justify-center shrink-0 ${
+                        isDark ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-600'
+                      }`}>
                         <Medal className="w-3.5 h-3.5" />
                       </div>
                       <div>
-                        <div className="font-medium text-slate-300 text-xs">
+                        <div className="font-medium text-xs">
                           {match.runnerUpTeam.name}
                         </div>
-                        <div className="text-[10px] text-slate-500">
+                        <div className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                           {match.runnerUpTeam.campusOrSection}
                         </div>
                       </div>
                     </div>
-                    <span className="text-xs font-semibold text-slate-400 tabular-nums">
+                    <span className={`text-xs font-semibold tabular-nums ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                       {match.runnerUpTeam.score} pts
                     </span>
                   </div>
@@ -346,8 +377,8 @@ export const TeamBattlesView: React.FC = () => {
 
                 {/* MVP Titles Awarded */}
                 <div className="space-y-2">
-                  <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Award className="w-3.5 h-3.5 text-amber-400" />
+                  <div className={`text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                    <Award className="w-3.5 h-3.5 text-amber-500" />
                     <span>Awarded MVPs</span>
                   </div>
 
@@ -355,25 +386,27 @@ export const TeamBattlesView: React.FC = () => {
                     {match.mvps.map((mvp) => (
                       <div
                         key={mvp.studentId}
-                        className="p-2.5 rounded-xl bg-slate-900 border border-slate-800/80 text-xs flex flex-col gap-1"
+                        className={`p-2.5 rounded-xl border text-xs flex flex-col gap-1 ${
+                          isDark ? 'bg-slate-900 border-slate-800/80' : 'bg-white border-slate-200'
+                        }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="font-semibold text-white truncate">{mvp.studentName}</span>
-                            <span className="text-[10px] text-slate-400 shrink-0">({mvp.campusOrSection})</span>
+                            <span className="font-semibold truncate">{mvp.studentName}</span>
+                            <span className={`text-[10px] shrink-0 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>({mvp.campusOrSection})</span>
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                            <span className="text-emerald-400 font-bold tabular-nums">+{mvp.xpAwarded} XP</span>
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold tabular-nums">+{mvp.xpAwarded} XP</span>
                           </div>
                         </div>
 
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-indigo-300 font-medium flex items-center gap-1">
-                            <Sparkles className="w-3 h-3 text-amber-400" />
+                          <span className="text-indigo-500 font-medium flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-amber-500" />
                             {mvp.mvpTitle}
                           </span>
-                          <span className="text-slate-500 text-[10px]">{mvp.problemsSolved} Solves</span>
+                          <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{mvp.problemsSolved} Solves</span>
                         </div>
                       </div>
                     ))}
@@ -381,8 +414,10 @@ export const TeamBattlesView: React.FC = () => {
                 </div>
 
                 {/* Match Summary Footer */}
-                <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
-                  <span className="text-slate-300 font-medium">Outcome: </span>
+                <div className={`pt-2 border-t text-[11px] ${
+                  isDark ? 'border-slate-800/80 text-slate-400' : 'border-slate-200 text-slate-600'
+                }`}>
+                  <span className={`font-medium ${isDark ? 'text-slate-300' : 'text-slate-800'}`}>Outcome: </span>
                   {match.summaryNote}
                 </div>
               </div>

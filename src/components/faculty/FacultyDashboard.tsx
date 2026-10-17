@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../store/appStore';
 import { generateQuizQuestionsFromAI } from '../../modules/geminiService';
 import { FacultyAssignmentManager } from './FacultyAssignmentManager';
+import { CODING_TOPICS } from '../../data/codingPracticeCatalog';
+import { GlobalFilterBar } from '../GlobalFilterBar';
 import {
   Users,
   CheckCircle,
@@ -16,10 +18,19 @@ import {
   Clock,
   ShieldAlert,
   Send,
-  FileSpreadsheet,
   Building2,
   Award,
   ArrowUpRight,
+  Code,
+  ShieldCheck,
+  Check,
+  HelpCircle,
+  BarChart3,
+  Flame,
+  Search,
+  Filter,
+  ArrowUpDown,
+  GraduationCap,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -41,18 +52,55 @@ export const FacultyDashboard: React.FC = () => {
     syllabusList,
     ledger,
     assignments,
+    auditFlags,
     theme,
+    isDark,
     approveQuestion,
     rejectQuestion,
     addQuestion,
     toggleSyllabusTopicTaught,
     voidLedgerEntry,
     sendFacultyNudge,
+    allCodingProblems,
+    studentSolvedProblems,
+    navSection,
+    setNavSection,
+    filteredStudents,
+    globalFilters,
+    updateGlobalFilter,
   } = useApp();
 
-  const isDark = theme === 'dark';
+  type FacultyTab =
+    | 'analytics'
+    | 'roster'
+    | 'coding'
+    | 'assignments'
+    | 'questions'
+    | 'ai_queue'
+    | 'syllabus'
+    | 'quiet'
+    | 'audit';
 
-  const [activeTab, setActiveTab] = useState<'analytics' | 'assignments' | 'questions' | 'syllabus' | 'audit' | 'quiet'>('analytics');
+  const [activeTab, setActiveTab] = useState<FacultyTab>('analytics');
+
+  // Synchronize with drawer navigation
+  useEffect(() => {
+    if (navSection.startsWith('faculty:')) {
+      const sub = navSection.replace('faculty:', '');
+      if (
+        ['analytics', 'roster', 'coding', 'assignments', 'questions', 'ai_queue', 'syllabus', 'quiet', 'audit'].includes(
+          sub
+        )
+      ) {
+        setActiveTab(sub as any);
+      }
+    }
+  }, [navSection]);
+
+  const handleTabChange = (tabId: FacultyTab) => {
+    setActiveTab(tabId);
+    setNavSection(`faculty:${tabId}`);
+  };
 
   // AI Question Generation State
   const [generatingAi, setGeneratingAi] = useState(false);
@@ -60,6 +108,9 @@ export const FacultyDashboard: React.FC = () => {
   const [genSubject, setGenSubject] = useState('Data Structures & Algorithms');
   const [genCount, setGenCount] = useState(3);
   const [genNotice, setGenNotice] = useState<string | null>(null);
+
+  // AI Queue Filters
+  const [queueTopicFilter, setQueueTopicFilter] = useState('all');
 
   // Manual Question State
   const [showManualForm, setShowManualForm] = useState(false);
@@ -75,42 +126,134 @@ export const FacultyDashboard: React.FC = () => {
   const [voidReason, setVoidReason] = useState('');
   const [voidNotice, setVoidNotice] = useState<string | null>(null);
 
-  // Analytics Computation
-  const activeStudentsCount = students.filter((s) => s.streakDays > 0).length;
-  const avgStreak = Math.round(
-    students.reduce((sum, s) => sum + s.streakDays, 0) / Math.max(1, students.length)
-  );
+  // Broadcast Nudge State
+  const [broadcastNudgeNotice, setBroadcastNudgeNotice] = useState<string | null>(null);
 
-  // Quiz Quality Metrics: % of generated questions accepted without edits
+  // Analytics Computation (strictly respects active global filters)
+  const cohortStudentCount = filteredStudents.length;
+  const activeStudentsCount = filteredStudents.filter((s) => s.streakDays > 0).length;
+  const avgStreak =
+    cohortStudentCount > 0
+      ? Math.round(filteredStudents.reduce((sum, s) => sum + s.streakDays, 0) / cohortStudentCount)
+      : 0;
+
+  // Quiz completion rate in filtered group
+  const quizCompletionRate =
+    cohortStudentCount > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (filteredStudents.filter((s) => s.streakDays >= 2).length / cohortStudentCount) * 100
+          )
+        )
+      : 0;
+
+  // Quiz Quality Metrics
   const aiGeneratedQuestions = questions.filter((q) => q.source === 'ai_generated');
   const approvedAiQuestions = aiGeneratedQuestions.filter((q) => q.status === 'approved');
-  const approvalRate = aiGeneratedQuestions.length > 0
-    ? Math.round((approvedAiQuestions.length / aiGeneratedQuestions.length) * 100)
-    : 88; // Pre-calculated baseline
+  const approvalRate =
+    aiGeneratedQuestions.length > 0
+      ? Math.round((approvedAiQuestions.length / aiGeneratedQuestions.length) * 100)
+      : 88;
 
-  // Quiet students (inactive for 5+ days or streak == 0)
-  const quietStudents = students.filter((s) => s.streakDays === 0 || s.lastActiveDate < '2026-10-09');
+  // Quiet students (inactive for 5+ days or streak == 0) within filtered cohort
+  const quietStudents = filteredStudents.filter(
+    (s) => s.streakDays === 0 || s.lastActiveDate < '2026-10-09'
+  );
 
-  // Struggling topics (simulated lowest accuracy by topic)
-  const strugglingTopics = [
-    { topic: 'Recursion Call Stacks & Invariants', subject: 'DSA', errorRate: 38, attempts: 210 },
-    { topic: 'Python MRO & C3 Linearization', subject: 'Python', errorRate: 34, attempts: 185 },
-    { topic: 'Monotonic Sequences in Stacks', subject: 'DSA', errorRate: 29, attempts: 195 },
-    { topic: 'LEGB Variable Closure Scope', subject: 'Python', errorRate: 24, attempts: 220 },
+  // Struggling topics (with subject filter awareness)
+  const allStrugglingTopics = [
+    {
+      topic: 'Recursion Call Stacks & Invariants',
+      subject: 'dsa',
+      subjectLabel: 'DSA',
+      errorRate: 38,
+      attempts: 210,
+      severity: 'high' as const,
+      difficulty: 'Hard',
+    },
+    {
+      topic: 'Monotonic Sequences in Stacks',
+      subject: 'dsa',
+      subjectLabel: 'DSA',
+      errorRate: 29,
+      attempts: 195,
+      severity: 'medium' as const,
+      difficulty: 'Medium',
+    },
+    {
+      topic: 'Dynamic Tree Traversal & Balancing',
+      subject: 'dsa',
+      subjectLabel: 'DSA',
+      errorRate: 27,
+      attempts: 160,
+      severity: 'medium' as const,
+      difficulty: 'Medium',
+    },
+    {
+      topic: 'Graph Shortest Paths (Dijkstra)',
+      subject: 'dsa',
+      subjectLabel: 'DSA',
+      errorRate: 33,
+      attempts: 140,
+      severity: 'high' as const,
+      difficulty: 'Hard',
+    },
+    {
+      topic: 'Python MRO & C3 Linearization',
+      subject: 'python',
+      subjectLabel: 'Python',
+      errorRate: 34,
+      attempts: 185,
+      severity: 'high' as const,
+      difficulty: 'Hard',
+    },
+    {
+      topic: 'LEGB Variable Closure Scope',
+      subject: 'python',
+      subjectLabel: 'Python',
+      errorRate: 24,
+      attempts: 220,
+      severity: 'low' as const,
+      difficulty: 'Medium',
+    },
+    {
+      topic: 'Generator Functions & Yield States',
+      subject: 'python',
+      subjectLabel: 'Python',
+      errorRate: 21,
+      attempts: 175,
+      severity: 'low' as const,
+      difficulty: 'Medium',
+    },
+    {
+      topic: 'AsyncIO Event Loop Invariants',
+      subject: 'python',
+      subjectLabel: 'Python',
+      errorRate: 31,
+      attempts: 130,
+      severity: 'high' as const,
+      difficulty: 'Hard',
+    },
   ];
 
-  // Daily Engagement Chart Data
+  const strugglingTopics = allStrugglingTopics.filter(
+    (t) => globalFilters.subject === 'all' || t.subject === globalFilters.subject
+  );
+
+  // Dynamic Daily Engagement & XP Trend Chart Data (scaled to active cohort)
+  const cohortScale = cohortStudentCount / Math.max(1, students.length);
   const engagementTrendData = [
-    { day: 'Mon', active: 48, quizzes: 42, avgXp: 35 },
-    { day: 'Tue', active: 52, quizzes: 46, avgXp: 38 },
-    { day: 'Wed', active: 49, quizzes: 44, avgXp: 32 },
-    { day: 'Thu', active: 55, quizzes: 51, avgXp: 44 },
-    { day: 'Fri', active: 53, quizzes: 49, avgXp: 40 },
-    { day: 'Sat', active: 44, quizzes: 38, avgXp: 28 },
-    { day: 'Sun', active: 41, quizzes: 35, avgXp: 25 },
+    { day: 'Mon', active: Math.round(48 * cohortScale), quizzes: Math.round(42 * cohortScale), avgXp: 35 },
+    { day: 'Tue', active: Math.round(52 * cohortScale), quizzes: Math.round(46 * cohortScale), avgXp: 38 },
+    { day: 'Wed', active: Math.round(49 * cohortScale), quizzes: Math.round(44 * cohortScale), avgXp: 32 },
+    { day: 'Thu', active: Math.round(55 * cohortScale), quizzes: Math.round(51 * cohortScale), avgXp: 44 },
+    { day: 'Fri', active: Math.round(53 * cohortScale), quizzes: Math.round(49 * cohortScale), avgXp: 40 },
+    { day: 'Sat', active: Math.round(44 * cohortScale), quizzes: Math.round(38 * cohortScale), avgXp: 28 },
+    { day: 'Sun', active: Math.round(41 * cohortScale), quizzes: Math.round(35 * cohortScale), avgXp: 25 },
   ];
 
-  // Campus Assignment Completion & Academic Metrics Computation across campuses
+  // Campus Assignment Completion & Academic Metrics
   const [campusNudgeNotice, setCampusNudgeNotice] = useState<string | null>(null);
 
   const liveHwSubmissions = ledger.filter(
@@ -137,10 +280,10 @@ export const FacultyDashboard: React.FC = () => {
       leadTopic: 'Algorithmic Recurrence Relations (Lab 4)',
     },
     {
-      campus: 'Ratnam' as const,
-      name: 'Ratnam Campus',
+      campus: 'Rathinam' as const,
+      name: 'Rathinam Campus',
       shortCode: 'RAT',
-      studentCount: students.filter((s) => s.campus === 'Ratnam').length || 16,
+      studentCount: students.filter((s) => s.campus === 'Rathinam').length || 16,
       assignmentCompletionRate: 86.4,
       onTimeRate: 89.2,
       attendanceRate: 88.5,
@@ -164,39 +307,25 @@ export const FacultyDashboard: React.FC = () => {
       avgStreakDays: 5.3,
       leadTopic: 'Tree Traversals & Stacks',
     },
-    {
-      campus: 'RGIB' as const,
-      name: 'RGIB Campus',
-      shortCode: 'RGB',
-      studentCount: students.filter((s) => s.campus === 'RGIB').length || 12,
-      assignmentCompletionRate: 79.5,
-      onTimeRate: 82.1,
-      attendanceRate: 81.4,
-      totalSubmissions: 310 + Math.floor(liveHwSubmissions * 0.15),
-      status: 'Needs Support' as const,
-      statusColor: 'amber',
-      leadTopic: 'Dynamic Memory & Graph Traversals',
-    },
-  ];
-
-  const overallAvgCompletion = +(
-    campusAnalytics.reduce((acc, c) => acc + c.assignmentCompletionRate, 0) /
-    campusAnalytics.length
-  ).toFixed(1);
-
-  const overallOnTimeRate = +(
-    campusAnalytics.reduce((acc, c) => acc + c.onTimeRate, 0) / campusAnalytics.length
-  ).toFixed(1);
-
-  const totalCrossCampusSubmissions = campusAnalytics.reduce(
-    (acc, c) => acc + c.totalSubmissions,
-    0
+  ].filter(
+    (c) => globalFilters.campuses.length === 0 || globalFilters.campuses.includes(c.campus)
   );
 
   const handleNudgeCampus = (campusName: string) => {
-    sendFacultyNudge('std_rahul_verma');
-    setCampusNudgeNotice(`Broadcast reminder successfully dispatched to ${campusName} faculty coordinator and students.`);
+    const studentToNudge = filteredStudents[0]?.id || 'std_rahul_verma';
+    sendFacultyNudge(studentToNudge);
+    setCampusNudgeNotice(
+      `Broadcast reminder successfully dispatched to ${campusName} faculty coordinator and students.`
+    );
     setTimeout(() => setCampusNudgeNotice(null), 4000);
+  };
+
+  const handleBroadcastNudgeAllQuiet = () => {
+    quietStudents.forEach((s) => sendFacultyNudge(s.id));
+    setBroadcastNudgeNotice(
+      `Non-punitive motivational nudge successfully dispatched to all ${quietStudents.length} quiet students!`
+    );
+    setTimeout(() => setBroadcastNudgeNotice(null), 4500);
   };
 
   // AI Question Generation Handler
@@ -204,12 +333,7 @@ export const FacultyDashboard: React.FC = () => {
     setGeneratingAi(true);
     setGenNotice(null);
     try {
-      const res = await generateQuizQuestionsFromAI(
-        genSubject,
-        genTopic,
-        'medium',
-        genCount
-      );
+      const res = await generateQuizQuestionsFromAI(genSubject, genTopic, 'medium', genCount);
 
       res.questions.forEach((q) => {
         addQuestion({
@@ -221,7 +345,7 @@ export const FacultyDashboard: React.FC = () => {
           correctOptionIndex: q.correctOptionIndex,
           explanation: q.explanation,
           source: 'ai_generated',
-          status: 'pending_approval', // Sent to faculty approval queue!
+          status: 'pending_approval',
           weekNumber: 4,
         });
       });
@@ -248,17 +372,17 @@ export const FacultyDashboard: React.FC = () => {
       questionText: manualQText,
       options: manualOptions,
       correctOptionIndex: manualCorrect,
-      explanation: manualExplanation || 'Standard faculty verified solution.',
+      explanation: manualExplanation || 'Standard collegiate curriculum invariant.',
       source: 'faculty_upload',
       status: 'approved',
       weekNumber: 4,
-      reviewedBy: activeFaculty.name,
     });
 
     setManualQText('');
     setManualOptions(['', '', '', '']);
     setManualExplanation('');
     setShowManualForm(false);
+    alert('Question added directly to active question bank!');
   };
 
   // Void XP Action
@@ -266,46 +390,114 @@ export const FacultyDashboard: React.FC = () => {
     e.preventDefault();
     if (!voidLedgerId || !voidReason) return;
     voidLedgerEntry(voidLedgerId, voidReason, activeFaculty.name);
-    setVoidNotice(`Ledger entry ${voidLedgerId} was voided. Student total XP recalculation applied.`);
+    setVoidNotice(`Ledger entry ${voidLedgerId} voided. Student total XP recomputed.`);
     setVoidLedgerId('');
     setVoidReason('');
+    setTimeout(() => setVoidNotice(null), 4000);
   };
 
   // Export Question Bank CSV
   const handleExportQuestionsCsv = () => {
-    const headers = ['ID', 'Subject', 'Topic', 'Difficulty', 'Question Text', 'Correct Option', 'Status'];
-    const rows = questions.map((q) => [
-      q.id,
-      q.subjectId,
-      `"${q.topic.replace(/"/g, '""')}"`,
-      q.difficulty,
-      `"${q.questionText.replace(/"/g, '""')}"`,
-      `"${q.options[q.correctOptionIndex]?.replace(/"/g, '""') || ''}"`,
-      q.status,
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      ['ID,Subject,Topic,Difficulty,Status,QuestionText,CorrectOption']
+        .concat(
+          questions.map(
+            (q) =>
+              `"${q.id}","${q.subjectId}","${q.topic}","${q.difficulty}","${q.status}","${q.questionText.replace(
+                /"/g,
+                '""'
+              )}","${q.options[q.correctOptionIndex]}"`
+          )
+        )
+        .join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `question_bank_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute(
+      'download',
+      `MiraiQuest_QuestionBank_${new Date().toISOString().split('T')[0]}.csv`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const pendingQuestions = questions.filter((q) => q.status === 'pending_approval');
+  // Pending questions filtered by subject and topic
+  const pendingQuestions = questions.filter((q) => {
+    if (q.status !== 'pending_approval') return false;
+    if (globalFilters.subject !== 'all' && q.subjectId !== globalFilters.subject) return false;
+    if (queueTopicFilter !== 'all' && !q.topic.toLowerCase().includes(queueTopicFilter.toLowerCase()))
+      return false;
+    return true;
+  });
+
+  const approvedQuestions = questions.filter((q) => {
+    if (q.status !== 'approved') return false;
+    if (globalFilters.subject !== 'all' && q.subjectId !== globalFilters.subject) return false;
+    return true;
+  });
+
+  // Unique pending topics
+  const availableQueueTopics = Array.from(
+    new Set(questions.filter((q) => q.status === 'pending_approval').map((q) => q.topic))
+  );
+
+  // Compute Per-Topic Student Coding Progress for Faculty (strictly uses filteredStudents)
+  const topicProgressMatrix = CODING_TOPICS.filter(
+    (t) => globalFilters.subject === 'all' || (t.category === 'core' && globalFilters.subject === 'dsa') || (t.id === 'strings' && globalFilters.subject === 'python') || true
+  ).map((topic) => {
+    const topicProblems = allCodingProblems.filter((p: any) => p.topicId === topic.id);
+    const totalCount = topicProblems.length || 1;
+    // Calculate how many filtered students have solved questions in this topic
+    const totalSolves = filteredStudents.reduce((sum, s) => {
+      const studentSolved = studentSolvedProblems[s.id] || [];
+      return sum + topicProblems.filter((p) => studentSolved.includes(p.id)).length;
+    }, 0);
+    const avgSolvesPerStudent =
+      cohortStudentCount > 0 ? Math.round((totalSolves / cohortStudentCount) * 10) / 10 : 0;
+    const proficiency =
+      cohortStudentCount > 0
+        ? Math.min(100, Math.round((totalSolves / (totalCount * cohortStudentCount)) * 100))
+        : 0;
+
+    return {
+      id: topic.id,
+      name: topic.name,
+      category: topic.category,
+      totalProblems: totalCount,
+      totalSolves,
+      avgSolvesPerStudent,
+      proficiency,
+      isStruggling: proficiency < 25,
+    };
+  });
+
+  // Filtered Ledger entries for the active cohort
+  const cohortLedger = ledger.filter((l) =>
+    filteredStudents.some((s) => s.id === l.studentId)
+  );
 
   return (
     <div className="space-y-6">
-      {/* Faculty Profile Strip */}
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Sticky Global Filter Bar */}
+      <GlobalFilterBar />
+
+      {/* Faculty Profile Banner */}
+      <div
+        className={`p-6 rounded-2xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors ${
+          isDark
+            ? 'bg-slate-900 border-slate-800 text-slate-100'
+            : 'bg-gradient-to-br from-indigo-50/70 via-white to-slate-50 border-slate-200 text-slate-900 shadow-xs'
+        }`}
+      >
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-blue-400 mb-1">
+          <div className="flex items-center gap-2 text-xs font-semibold text-indigo-500 mb-1">
+            <GraduationCap className="w-4 h-4" />
             <span>FACULTY PORTAL · {activeFaculty.campus} CAMPUS</span>
           </div>
-          <h2 className="text-xl font-bold text-white">{activeFaculty.name}</h2>
-          <div className="text-xs text-slate-400 mt-0.5">
+          <h2 className="text-xl font-bold tracking-tight">{activeFaculty.name}</h2>
+          <div className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
             {activeFaculty.department} · Assigned Sections: {activeFaculty.assignedSections.join(', ')}
           </div>
         </div>
@@ -313,31 +505,44 @@ export const FacultyDashboard: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={handleExportQuestionsCsv}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs font-semibold text-slate-200 hover:text-white transition-colors"
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+              isDark
+                ? 'bg-slate-950 border-slate-800 text-slate-200 hover:text-white hover:bg-slate-800'
+                : 'bg-white border-slate-200 text-slate-800 hover:bg-slate-50 shadow-2xs'
+            }`}
           >
-            <Download className="w-3.5 h-3.5 text-indigo-400" />
+            <Download className="w-3.5 h-3.5 text-indigo-500" />
             <span>Export Question Bank CSV</span>
           </button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-800 text-xs font-medium">
+      {/* Navigation Tabs */}
+      <div
+        className={`flex flex-wrap items-center gap-2 pb-2 border-b text-xs font-semibold ${
+          isDark ? 'border-slate-800' : 'border-slate-200'
+        }`}
+      >
         {[
-          { id: 'analytics', label: 'Class Analytics & Cross-Campus' },
-          { id: 'assignments', label: `Assignments & Uploads (${assignments.length})` },
-          { id: 'questions', label: `Question Bank & AI Queue (${pendingQuestions.length} Pending)` },
-          { id: 'syllabus', label: 'Syllabus & Topics Taught' },
-          { id: 'quiet', label: `Quiet Students At-Risk (${quietStudents.length})` },
+          { id: 'analytics', label: 'Class Analytics & Trends' },
+          { id: 'roster', label: `Student Roster (${cohortStudentCount})` },
+          { id: 'coding', label: 'Coding Practice Matrix' },
+          { id: 'assignments', label: `Assignment Management (${assignments.length})` },
+          { id: 'questions', label: `Question Bank (${approvedQuestions.length})` },
+          { id: 'ai_queue', label: `AI Approval Queue (${pendingQuestions.length} Pending)` },
+          { id: 'syllabus', label: 'My Classes & Syllabus' },
+          { id: 'quiet', label: `Quiet Students (${quietStudents.length})` },
           { id: 'audit', label: 'Faculty XP Override' },
         ].map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`px-3.5 py-2 rounded-xl transition-colors whitespace-nowrap shrink-0 ${
+            onClick={() => handleTabChange(tab.id as any)}
+            className={`px-3.5 py-2 rounded-xl transition-all whitespace-nowrap shrink-0 cursor-pointer ${
               activeTab === tab.id
-                ? 'bg-indigo-600 text-white font-semibold'
-                : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                ? 'bg-indigo-600 text-white font-bold shadow-xs shadow-indigo-600/30'
+                : isDark
+                ? 'bg-slate-900 text-slate-300 hover:text-white border border-slate-800'
+                : 'bg-white text-slate-700 hover:text-slate-900 border border-slate-200 shadow-2xs'
             }`}
           >
             {tab.label}
@@ -348,560 +553,927 @@ export const FacultyDashboard: React.FC = () => {
       {/* 1. Analytics & Trends */}
       {activeTab === 'analytics' && (
         <div className="space-y-6">
-          {/* KPI Strip */}
+          {/* KPI Strip (Respects Active Global Filters) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-              <div className="text-xs text-slate-400 mb-1">Daily Active Students</div>
-              <div className="text-2xl font-bold text-white tabular-nums">
-                {activeStudentsCount} / {students.length}
+            <div
+              className={`p-4 rounded-xl border transition-colors ${
+                isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-xs'
+              }`}
+            >
+              <div className={`text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Daily Active Students
               </div>
-              <div className="text-[11px] text-emerald-400 mt-1">87% Active This Week</div>
+              <div className="text-2xl font-bold tabular-nums">
+                {activeStudentsCount} / {cohortStudentCount}
+              </div>
+              <div className="text-[11px] text-emerald-500 font-semibold mt-1">
+                {cohortStudentCount > 0
+                  ? Math.round((activeStudentsCount / cohortStudentCount) * 100)
+                  : 0}
+                % Active in Filtered Cohort
+              </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-              <div className="text-xs text-slate-400 mb-1">Average Streak Length</div>
-              <div className="text-2xl font-bold text-orange-400 tabular-nums">
+            <div
+              className={`p-4 rounded-xl border transition-colors ${
+                isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-xs'
+              }`}
+            >
+              <div className={`text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Average Streak Length
+              </div>
+              <div className="text-2xl font-bold text-orange-500 tabular-nums">
                 {avgStreak} Days
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">Consistency Habit Metric</div>
+              <div className={`text-[11px] mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Filtered Cohort Habit Metric
+              </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-              <div className="text-xs text-slate-400 mb-1">AI Questions Accepted</div>
-              <div className="text-2xl font-bold text-indigo-400 tabular-nums">
-                {approvalRate}%
+            <div
+              className={`p-4 rounded-xl border transition-colors ${
+                isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-xs'
+              }`}
+            >
+              <div className={`text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Quiz Completion Rate
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">Quiz Quality Benchmark</div>
+              <div className="text-2xl font-bold text-indigo-500 tabular-nums">
+                {quizCompletionRate}%
+              </div>
+              <div className={`text-[11px] mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Daily Micro-Quiz Target
+              </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-              <div className="text-xs text-slate-400 mb-1">Pending Inquiries</div>
-              <div className="text-2xl font-bold text-amber-400 tabular-nums">
-                {pendingQuestions.length}
+            <div
+              className={`p-4 rounded-xl border transition-colors ${
+                isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-xs'
+              }`}
+            >
+              <div className={`text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Quiet Students (5+ days)
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">Questions Awaiting Review</div>
+              <div className="text-2xl font-bold text-amber-500 tabular-nums">
+                {quietStudents.length}
+              </div>
+              <div className={`text-[11px] mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Need Re-engagement
+              </div>
             </div>
           </div>
 
           {/* Toast Notice for Campus Nudge */}
           {campusNudgeNotice && (
-            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-2 animate-in fade-in duration-200">
+            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-400 text-xs flex items-center justify-between gap-2 animate-in fade-in duration-200">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                 <span>{campusNudgeNotice}</span>
               </div>
               <button
                 onClick={() => setCampusNudgeNotice(null)}
-                className="text-slate-400 hover:text-white text-xs"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white text-xs cursor-pointer"
               >
                 Dismiss
               </button>
             </div>
           )}
 
-          {/* CROSS-CAMPUS ASSIGNMENT COMPLETION SUMMARY CARD */}
-          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-6 shadow-sm">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-semibold text-indigo-400 mb-1">
-                  <Building2 className="w-4 h-4 text-emerald-400" />
-                  <span>CROSS-CAMPUS ACADEMIC BENCHMARK</span>
+          {/* Engagement & XP Trend Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Daily Active & Quizzes Trend */}
+            <div
+              className={`p-5 rounded-2xl border space-y-4 shadow-xs transition-colors ${
+                isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-indigo-500" />
+                    <span>Daily Student Engagement & Quiz Participation</span>
+                  </h4>
+                  <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Active learners and completed micro-quizzes over the past 7 days.
+                  </p>
                 </div>
-                <h3 className="text-lg font-bold text-white">
-                  Student Assignment Completion Rates Across Campuses
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Aggregated on-time submission compliance, course lab completion, and learning velocity across HI-Tech, Ratnam, JUJ, and RGIB.
+              </div>
+
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={engagementTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#e2e8f0'} />
+                    <XAxis dataKey="day" stroke={isDark ? '#94a3b8' : '#64748b'} fontSize={11} />
+                    <YAxis stroke={isDark ? '#94a3b8' : '#64748b'} fontSize={11} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: isDark ? '#0f172a' : '#ffffff',
+                        borderColor: isDark ? '#334155' : '#cbd5e1',
+                        borderRadius: '0.75rem',
+                        fontSize: '12px',
+                      }}
+                    />
+                    <Bar dataKey="active" fill="#6366f1" name="Active Students" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="quizzes" fill="#10b981" name="Completed Quizzes" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* XP Velocity & Average XP per Student Trend */}
+            <div
+              className={`p-5 rounded-2xl border space-y-4 shadow-xs transition-colors ${
+                isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold flex items-center gap-2">
+                    <TrendingDown className="w-4 h-4 text-emerald-500 rotate-180" />
+                    <span>Cohort Learning Velocity (Average XP Earned)</span>
+                  </h4>
+                  <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Mean daily academic & practice XP earned per filtered student.
+                  </p>
+                </div>
+              </div>
+
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={engagementTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#e2e8f0'} />
+                    <XAxis dataKey="day" stroke={isDark ? '#94a3b8' : '#64748b'} fontSize={11} />
+                    <YAxis stroke={isDark ? '#94a3b8' : '#64748b'} fontSize={11} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: isDark ? '#0f172a' : '#ffffff',
+                        borderColor: isDark ? '#334155' : '#cbd5e1',
+                        borderRadius: '0.75rem',
+                        fontSize: '12px',
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="avgXp"
+                      stroke="#f59e0b"
+                      strokeWidth={3}
+                      name="Average XP / Student"
+                      dot={{ fill: '#f59e0b', r: 4 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* STRUGGLING TOPICS HEATMAP & ERROR RATES */}
+          <div
+            className={`p-6 rounded-2xl border space-y-5 shadow-xs transition-colors ${
+              isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h4 className="text-base font-bold flex items-center gap-2 text-rose-500">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Struggling Topics Diagnostic & Heatmap ({strugglingTopics.length} Topics Identified)</span>
+                </h4>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Based on wrong answer rates in quizzes and failing test cases in sandbox unit tests.
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-[11px] px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 font-medium flex items-center gap-1.5">
-                  <Award className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-[11px] font-semibold text-slate-400">Subject:</span>
+                <select
+                  value={globalFilters.subject}
+                  onChange={(e) => updateGlobalFilter('subject', e.target.value)}
+                  className={`text-xs px-2.5 py-1 rounded-lg border outline-hidden ${
+                    isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-800'
+                  }`}
+                >
+                  <option value="all">All Subjects</option>
+                  <option value="dsa">DSA</option>
+                  <option value="python">Python</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Visual Heatmap Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {strugglingTopics.map((st, idx) => (
+                <div
+                  key={idx}
+                  className={`p-3.5 rounded-xl border space-y-2 transition-all ${
+                    st.errorRate >= 30
+                      ? isDark
+                        ? 'bg-rose-950/20 border-rose-800/40 text-rose-200'
+                        : 'bg-rose-50/70 border-rose-200 text-rose-900'
+                      : isDark
+                      ? 'bg-amber-950/20 border-amber-800/40 text-amber-200'
+                      : 'bg-amber-50/70 border-amber-200 text-amber-900'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-black/10 dark:bg-white/10">
+                      {st.subjectLabel} · {st.difficulty}
+                    </span>
+                    <span className="text-xs font-black text-rose-500">{st.errorRate}% Error</span>
+                  </div>
+
+                  <h5 className="font-bold text-xs line-clamp-2">{st.topic}</h5>
+
+                  {/* Heatmap Bar */}
+                  <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${
+                        st.errorRate >= 30 ? 'bg-rose-500' : 'bg-amber-500'
+                      }`}
+                      style={{ width: `${st.errorRate}%` }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] opacity-75">
+                    <span>{st.attempts} quiz attempts</span>
+                    <span>Review recommended</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* CROSS-CAMPUS ASSIGNMENT BENCHMARKS (FILTERED) */}
+          <div
+            className={`p-6 rounded-2xl border space-y-6 shadow-sm transition-colors ${
+              isDark
+                ? 'bg-slate-900 border-slate-800 text-slate-100'
+                : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+            }`}
+          >
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-semibold text-indigo-500 mb-1">
+                  <Building2 className="w-4 h-4 text-emerald-500" />
+                  <span>CROSS-CAMPUS ACADEMIC BENCHMARK</span>
+                </div>
+                <h3 className="text-lg font-bold">
+                  Student Assignment Completion Rates Across Campuses
+                </h3>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Aggregated on-time submission compliance, course lab completion, and learning velocity across HI-Tech, Rathinam, and JUJ.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span
+                  className={`text-[11px] px-3 py-1.5 rounded-lg border font-medium flex items-center gap-1.5 ${
+                    isDark
+                      ? 'bg-slate-950 border-slate-800 text-slate-300'
+                      : 'bg-slate-100 border-slate-200 text-slate-700'
+                  }`}
+                >
+                  <Award className="w-3.5 h-3.5 text-amber-500" />
                   <span>Semester Goal: 80% Min</span>
                 </span>
               </div>
             </div>
 
-            {/* Aggregated KPI Row */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-              {/* Overall Completion */}
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between">
-                <div className="text-[11px] text-slate-400 font-medium">Average Completion</div>
-                <div className="text-2xl font-extrabold text-emerald-400 tabular-nums my-1">
-                  {overallAvgCompletion}%
-                </div>
-                <div className="text-[10px] text-slate-500">
-                  +5.5% vs MSOT benchmark target
-                </div>
-              </div>
-
-              {/* On-Time Rate */}
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between">
-                <div className="text-[11px] text-slate-400 font-medium">On-Time Submissions</div>
-                <div className="text-2xl font-extrabold text-indigo-400 tabular-nums my-1">
-                  {overallOnTimeRate}%
-                </div>
-                <div className="text-[10px] text-slate-500">
-                  LMS timestamp validated before deadline
-                </div>
-              </div>
-
-              {/* Total Submissions */}
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between">
-                <div className="text-[11px] text-slate-400 font-medium">Total Verified Labs</div>
-                <div className="text-2xl font-extrabold text-white tabular-nums my-1">
-                  {totalCrossCampusSubmissions}
-                </div>
-                <div className="text-[10px] text-slate-500">
-                  Zero unverified self-credit allowed
-                </div>
-              </div>
-
-              {/* Leader Campus */}
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between">
-                <div className="text-[11px] text-slate-400 font-medium">Top Performing Campus</div>
-                <div className="text-xl font-bold text-amber-400 tabular-nums my-1 truncate">
-                  HI-Tech (91.8%)
-                </div>
-                <div className="text-[10px] text-slate-500 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  <span>428+ verified submissions</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Visual Comparison: Campus Breakdown & Chart */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-              {/* Campus Breakdown Cards (7 Cols) */}
-              <div className="lg:col-span-7 space-y-3">
-                <div className="text-xs font-bold text-white uppercase tracking-wider flex items-center justify-between mb-1">
-                  <span>Campus-by-Campus Breakdown</span>
-                  <span className="text-[10px] text-slate-400 font-normal">Active Cohort Standings</span>
-                </div>
-
-                <div className="space-y-2.5">
-                  {campusAnalytics.map((c) => (
-                    <div
-                      key={c.campus}
-                      className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition-colors space-y-2"
+            {/* Campus Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {campusAnalytics.map((c) => (
+                <div
+                  key={c.campus}
+                  className={`p-4 rounded-xl border space-y-3 transition-colors ${
+                    isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-sm">{c.name}</h4>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {c.studentCount} active students
+                      </span>
+                    </div>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                        c.statusColor === 'emerald'
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400'
+                      }`}
                     >
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px] font-bold">
-                            {c.shortCode}
-                          </span>
-                          <span className="font-semibold text-white">{c.name}</span>
-                          <span
-                            className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
-                              c.statusColor === 'emerald'
-                                ? 'bg-emerald-500/20 text-emerald-300'
-                                : c.statusColor === 'indigo'
-                                ? 'bg-indigo-500/20 text-indigo-300'
-                                : 'bg-amber-500/20 text-amber-300'
-                            }`}
-                          >
-                            {c.status}
-                          </span>
-                        </div>
+                      {c.status}
+                    </span>
+                  </div>
 
-                        <div className="flex items-center gap-3">
-                          <span className="text-slate-400 text-[11px]">
-                            {c.studentCount} Students · {c.totalSubmissions} Labs
-                          </span>
-                          <span className="text-sm font-bold text-emerald-400 tabular-nums">
-                            {c.assignmentCompletionRate}%
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Progress Bar */}
-                      <div className="w-full h-2 rounded-full bg-slate-900 overflow-hidden border border-slate-800/80">
-                        <div
-                          className={`h-full rounded-full transition-all duration-700 ${
-                            c.statusColor === 'emerald'
-                              ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                              : c.statusColor === 'indigo'
-                              ? 'bg-gradient-to-r from-indigo-500 to-indigo-400'
-                              : 'bg-gradient-to-r from-amber-500 to-orange-400'
-                          }`}
-                          style={{ width: `${c.assignmentCompletionRate}%` }}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
-                        <div className="truncate max-w-[280px]">
-                          <span className="text-slate-500">Focus: </span>
-                          <span>{c.leadTopic}</span>
-                        </div>
-
-                        <div className="flex items-center gap-3 shrink-0">
-                          <span>On-Time: <strong className="text-slate-200">{c.onTimeRate}%</strong></span>
-                          <span>Attn: <strong className="text-slate-200">{c.attendanceRate}%</strong></span>
-                          <button
-                            onClick={() => handleNudgeCampus(c.name)}
-                            className="text-indigo-400 hover:text-indigo-300 font-medium ml-1 flex items-center gap-0.5"
-                          >
-                            <span>Nudge</span>
-                            <ArrowUpRight className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className={isDark ? 'text-slate-400' : 'text-slate-600'}>
+                        Assignment Completion:
+                      </span>
+                      <span className="font-bold">{c.assignmentCompletionRate}%</span>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Recharts Bar Chart: Cross-Campus Comparison (5 Cols) */}
-              <div className="lg:col-span-5 p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-between">
-                <div>
-                  <div className="text-xs font-bold text-white uppercase tracking-wider mb-1">
-                    Completion vs Attendance
-                  </div>
-                  <div className="text-[11px] text-slate-400 mb-3">
-                    Correlation between class attendance and assignment completion
-                  </div>
-
-                  <div className="h-56 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={campusAnalytics} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="shortCode" stroke="#94a3b8" fontSize={11} />
-                        <YAxis domain={[60, 100]} stroke="#94a3b8" fontSize={11} />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: '#0f172a',
-                            borderColor: '#334155',
-                            fontSize: '11px',
-                            borderRadius: '8px',
-                          }}
-                        />
-                        <Bar dataKey="assignmentCompletionRate" fill="#10b981" name="Assignment %" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="attendanceRate" fill="#6366f1" name="Attendance %" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-around text-[10px] text-slate-400 pt-2 border-t border-slate-800/80">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />
-                    <span>Assignment Completion</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-indigo-500 inline-block" />
-                    <span>Attendance Rate</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Daily Active Engagement Trend */}
-            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-4">
-                Weekly Engagement & Quiz Submissions
-              </h4>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={engagementTrendData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="day" stroke="#94a3b8" fontSize={11} />
-                    <YAxis stroke="#94a3b8" fontSize={11} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '12px' }}
-                    />
-                    <Line type="monotone" dataKey="active" stroke="#6366f1" strokeWidth={2} name="Active Students" />
-                    <Line type="monotone" dataKey="quizzes" stroke="#10b981" strokeWidth={2} name="Quizzes Taken" />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Struggling Topics */}
-            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between">
-              <div>
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-2 flex items-center gap-1.5 text-rose-400">
-                  <TrendingDown className="w-4 h-4" />
-                  <span>Topics Students Struggle With (Lowest Accuracy)</span>
-                </h4>
-                <p className="text-xs text-slate-400 mb-4">
-                  Aggregated from daily micro-challenges across sections. Recommended for in-class revision.
-                </p>
-
-                <div className="space-y-3">
-                  {strugglingTopics.map((st, idx) => (
-                    <div key={idx} className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="font-semibold text-white">{st.topic}</span>
-                        <span className="text-rose-400 font-bold tabular-nums">
-                          {st.errorRate}% Error Rate
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-400">
-                        <span>Subject: {st.subject}</span>
-                        <span>{st.attempts} quiz responses recorded</span>
-                      </div>
+                    <div className="flex justify-between">
+                      <span className={isDark ? 'text-slate-400' : 'text-slate-600'}>On-Time Rate:</span>
+                      <span className="font-bold text-emerald-500">{c.onTimeRate}%</span>
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <div className="flex justify-between">
+                      <span className={isDark ? 'text-slate-400' : 'text-slate-600'}>
+                        Average Streak:
+                      </span>
+                      <span className="font-bold text-amber-500">{c.avgStreakDays} days</span>
+                    </div>
+                  </div>
 
-              <div className="text-[11px] text-slate-500 pt-3">
-                * Automatic alerts are generated when a topic error rate exceeds 30%.
-              </div>
+                  <button
+                    onClick={() => handleNudgeCampus(c.name)}
+                    className="w-full mt-2 py-1.5 text-[11px] font-semibold rounded-lg border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
+                  >
+                    Broadcast Nudge to {c.shortCode}
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* 2. Assignments & Coursework Manager */}
-      {activeTab === 'assignments' && <FacultyAssignmentManager />}
-
-      {/* 3. Question Bank & AI Queue */}
-      {activeTab === 'questions' && (
-        <div className="space-y-6">
-          {/* Generation & Upload Actions */}
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-indigo-400" />
-              <span>Generate Questions with Gemini AI & Human Faculty Approval</span>
-            </h4>
-            <p className="text-xs text-slate-400 mb-4">
-              AI questions are held in the Approval Queue and never released to students until a faculty member inspects, edits, or approves them.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-4">
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1">Subject</label>
-                <select
-                  value={genSubject}
-                  onChange={(e) => setGenSubject(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
-                >
-                  <option value="Data Structures & Algorithms">Data Structures & Algorithms</option>
-                  <option value="Python Programming">Python Programming</option>
-                </select>
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-[11px] text-slate-400 mb-1">Taught Syllabus Topic</label>
-                <input
-                  type="text"
-                  value={genTopic}
-                  onChange={(e) => setGenTopic(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1">Number of Questions</label>
-                <select
-                  value={genCount}
-                  onChange={(e) => setGenCount(Number(e.target.value))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
-                >
-                  <option value={3}>3 Questions</option>
-                  <option value={5}>5 Questions</option>
-                </select>
-              </div>
+      {/* 2. Student Roster / Class Directory Tab */}
+      {activeTab === 'roster' && (
+        <div
+          className={`p-6 rounded-2xl border space-y-4 shadow-xs transition-colors ${
+            isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h4 className="text-base font-bold flex items-center gap-2 text-indigo-500">
+                <Users className="w-4 h-4" />
+                <span>Class Roster ({cohortStudentCount} Students Matching Filters)</span>
+              </h4>
+              <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                Student profiles, academic year, section, streak habit, and coding milestones.
+              </p>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleGenerateQuestions}
-                  disabled={generatingAi}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                >
-                  <Sparkles className={`w-3.5 h-3.5 ${generatingAi ? 'animate-spin' : ''}`} />
-                  <span>{generatingAi ? 'Generating via Gemini...' : 'Generate to Approval Queue'}</span>
-                </button>
-
-                <button
-                  onClick={() => setShowManualForm(!showManualForm)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>{showManualForm ? 'Hide Form' : 'Manual Upload'}</span>
-                </button>
-              </div>
-
-              <span className="text-xs text-slate-400">
-                Quality Metric: <strong className="text-white">{approvalRate}%</strong> of AI questions accepted without edits
-              </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-400">Sort:</span>
+              <select
+                value={globalFilters.sortBy}
+                onChange={(e) => updateGlobalFilter('sortBy', e.target.value as any)}
+                className={`text-xs px-2.5 py-1.5 rounded-lg border outline-hidden ${
+                  isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-800'
+                }`}
+              >
+                <option value="xp">Highest Total XP</option>
+                <option value="name">Student Name (A-Z)</option>
+                <option value="streak">Streak Days</option>
+                <option value="activity">Most Recently Active</option>
+              </select>
             </div>
-
-            {genNotice && (
-              <div className="mt-4 p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs">
-                {genNotice}
-              </div>
-            )}
           </div>
 
-          {/* Manual Form */}
-          {showManualForm && (
-            <form onSubmit={handleManualSubmit} className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-              <h5 className="text-xs font-bold text-white uppercase tracking-wider">Manual Question Entry</h5>
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+            <table className="w-full text-left text-xs">
+              <thead className={`font-semibold border-b ${isDark ? 'bg-slate-950/60 border-slate-800 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+                <tr>
+                  <th className="py-3 px-4">Student</th>
+                  <th className="py-3 px-4">Campus & Year</th>
+                  <th className="py-3 px-4">Section</th>
+                  <th className="py-3 px-4 text-center">Streak</th>
+                  <th className="py-3 px-4 text-center">Level & XP</th>
+                  <th className="py-3 px-4 text-center">Verified Solves</th>
+                  <th className="py-3 px-4 text-center">Last Active</th>
+                  <th className="py-3 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className={`divide-y ${isDark ? 'divide-slate-800/80' : 'divide-slate-100'}`}>
+                {filteredStudents.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-8 text-center text-slate-400 italic">
+                      No students found matching current filters. Try resetting filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredStudents.map((s) => (
+                    <tr
+                      key={s.id}
+                      className={`transition-colors ${
+                        isDark ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-slate-900 dark:text-white">{s.name}</div>
+                        <div className="text-[11px] font-mono text-slate-400">{s.rollNumber}</div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="font-semibold">{s.campus}</span>
+                        <div className="text-[10px] text-slate-400">{s.year}</div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                          {s.section}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-center font-bold">
+                        <span className="inline-flex items-center gap-1 text-orange-500">
+                          <Flame className="w-3.5 h-3.5 fill-current" />
+                          {s.streakDays}d
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <div className="font-bold text-indigo-600 dark:text-indigo-400">
+                          Lvl {s.level}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono">
+                          {s.totalXp.toLocaleString()} XP
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-center font-mono font-semibold">
+                        {(studentSolvedProblems[s.id] || []).length} problems
+                      </td>
+                      <td className="py-3 px-4 text-center text-[11px] text-slate-400 font-mono">
+                        {s.lastActiveDate}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <button
+                          onClick={() => sendFacultyNudge(s.id)}
+                          className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800 transition-colors"
+                        >
+                          Nudge
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Coding Practice Progress Tab */}
+      {activeTab === 'coding' && (
+        <div className="space-y-6">
+          {/* Topic Progress Matrix */}
+          <div
+            className={`p-6 rounded-2xl border space-y-4 shadow-xs transition-colors ${
+              isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b">
               <div>
-                <label className="block text-[11px] text-slate-400 mb-1">Question Prompt</label>
-                <textarea
-                  value={manualQText}
-                  onChange={(e) => setManualQText(e.target.value)}
-                  rows={2}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-white"
-                  required
-                />
+                <h4 className="text-base font-bold flex items-center gap-2">
+                  <Code className="w-4 h-4 text-indigo-500" />
+                  <span>Topic-wise Practice Proficiency ({filteredStudents.length} Students)</span>
+                </h4>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Aggregate mastery and solve counts across algorithmic coding topics in the filtered cohort.
+                </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {manualOptions.map((opt, i) => (
-                  <div key={i}>
-                    <label className="block text-[11px] text-slate-400 mb-1">Option {String.fromCharCode(65 + i)}</label>
-                    <input
-                      type="text"
-                      value={opt}
-                      onChange={(e) => {
-                        const copy = [...manualOptions];
-                        copy[i] = e.target.value;
-                        setManualOptions(copy);
-                      }}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                      required
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold">
+                  Cohort Target: 60%+ Solves
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {topicProgressMatrix.map((tm) => (
+                <div
+                  key={tm.id}
+                  className={`p-3.5 rounded-xl border transition-all ${
+                    isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-bold truncate">{tm.name}</span>
+                    <span
+                      className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded ${
+                        tm.isStruggling
+                          ? 'bg-rose-500/15 text-rose-500'
+                          : tm.proficiency >= 50
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-amber-500/15 text-amber-500'
+                      }`}
+                    >
+                      {tm.proficiency}%
+                    </span>
+                  </div>
+
+                  <div className={`w-full h-1.5 rounded-full overflow-hidden ${isDark ? 'bg-slate-900' : 'bg-slate-200'}`}>
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        tm.isStruggling ? 'bg-rose-500' : 'bg-indigo-600'
+                      }`}
+                      style={{ width: `${tm.proficiency}%` }}
                     />
                   </div>
-                ))}
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">Correct Option</label>
-                  <select
-                    value={manualCorrect}
-                    onChange={(e) => setManualCorrect(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                  >
-                    <option value={0}>Option A</option>
-                    <option value={1}>Option B</option>
-                    <option value={2}>Option C</option>
-                    <option value={3}>Option D</option>
-                  </select>
+                  <div className={`flex items-center justify-between text-[10px] mt-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <span>{tm.totalProblems} Questions</span>
+                    <span>{tm.avgSolvesPerStudent} avg solves/std</span>
+                  </div>
                 </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-[11px] text-slate-400 mb-1">Pedagogical Explanation</label>
-                  <input
-                    type="text"
-                    value={manualExplanation}
-                    onChange={(e) => setManualExplanation(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                    placeholder="Why this answer is mathematically / programmatically correct..."
-                  />
-                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Student-by-Student Coding Matrix */}
+          <div
+            className={`p-6 rounded-2xl border space-y-4 shadow-xs transition-colors ${
+              isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+            }`}
+          >
+            <div>
+              <h4 className="text-base font-bold flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                <span>Student-by-Student Algorithmic Verification Ledger</span>
+              </h4>
+              <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                Verified unit-test submissions executed inside the sandboxed test runner.
+              </p>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+              <table className="w-full text-left text-xs">
+                <thead className={`font-semibold border-b ${isDark ? 'bg-slate-950/60 border-slate-800 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+                  <tr>
+                    <th className="py-3 px-4">Student</th>
+                    <th className="py-3 px-4">Campus & Section</th>
+                    <th className="py-3 px-4 text-center">Arrays</th>
+                    <th className="py-3 px-4 text-center">Strings</th>
+                    <th className="py-3 px-4 text-center">Hashing</th>
+                    <th className="py-3 px-4 text-center">Trees</th>
+                    <th className="py-3 px-4 text-center">Total Verified</th>
+                  </tr>
+                </thead>
+                <tbody className={`divide-y ${isDark ? 'divide-slate-800/80' : 'divide-slate-100'}`}>
+                  {filteredStudents.map((s) => {
+                    const solved = studentSolvedProblems[s.id] || [];
+                    const arraysCount = solved.filter((id) => id.includes('arrays')).length;
+                    const stringsCount = solved.filter((id) => id.includes('strings')).length;
+                    const hashingCount = solved.filter((id) => id.includes('hashing')).length;
+                    const treesCount = solved.filter((id) => id.includes('trees')).length;
+
+                    return (
+                      <tr key={`matrix-${s.id}`} className={isDark ? 'hover:bg-slate-800/30' : 'hover:bg-slate-50'}>
+                        <td className="py-3 px-4 font-bold">{s.name}</td>
+                        <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">
+                          {s.campus} · Sec {s.section}
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono">
+                          <span className={arraysCount > 0 ? 'text-emerald-500 font-bold' : 'text-slate-400'}>
+                            {arraysCount} / 3
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono">
+                          <span className={stringsCount > 0 ? 'text-emerald-500 font-bold' : 'text-slate-400'}>
+                            {stringsCount} / 2
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono">
+                          <span className={hashingCount > 0 ? 'text-emerald-500 font-bold' : 'text-slate-400'}>
+                            {hashingCount} / 2
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono">
+                          <span className={treesCount > 0 ? 'text-emerald-500 font-bold' : 'text-slate-400'}>
+                            {treesCount} / 2
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-bold text-indigo-500 tabular-nums">
+                          {solved.length} Solved
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Assignment Management Section */}
+      {activeTab === 'assignments' && <FacultyAssignmentManager />}
+
+      {/* 5. Question Bank */}
+      {activeTab === 'questions' && (
+        <div className="space-y-6">
+          <div
+            className={`p-6 rounded-2xl border space-y-4 transition-colors ${
+              isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b">
+              <div>
+                <h4 className="text-base font-bold flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4 text-indigo-500" />
+                  <span>Approved Question Bank ({approvedQuestions.length} Questions)</span>
+                </h4>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Questions actively used in student daily micro-quizzes.
+                </p>
               </div>
 
               <button
-                type="submit"
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold"
+                onClick={() => setShowManualForm(!showManualForm)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-xs cursor-pointer"
               >
-                Save to Question Bank
+                <Plus className="w-3.5 h-3.5" />
+                <span>{showManualForm ? 'Close Form' : 'Upload Question'}</span>
               </button>
-            </form>
-          )}
+            </div>
 
-          {/* Pending Approval Queue */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center justify-between">
-              <span>Pending Human Verification ({pendingQuestions.length})</span>
-              <span className="text-[11px] font-normal text-slate-400">Strict Quality Gate: Only approved items reach students</span>
-            </h4>
+            {/* Manual Form */}
+            {showManualForm && (
+              <form
+                onSubmit={handleManualSubmit}
+                className={`p-4 rounded-xl border space-y-3 ${
+                  isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <h5 className="text-xs font-bold uppercase tracking-wider">Manual Question Entry</h5>
+                <div>
+                  <label className="block text-[11px] mb-1 font-semibold">Question Prompt</label>
+                  <textarea
+                    value={manualQText}
+                    onChange={(e) => setManualQText(e.target.value)}
+                    rows={2}
+                    className={`w-full border rounded-lg p-2.5 text-xs outline-none ${
+                      isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                    }`}
+                    required
+                  />
+                </div>
 
-            {pendingQuestions.length === 0 ? (
-              <div className="p-8 text-center rounded-2xl bg-slate-900 border border-slate-800 text-slate-400 text-xs">
-                No questions pending verification. Click "Generate to Approval Queue" above to draft questions.
-              </div>
-            ) : (
-              pendingQuestions.map((q) => (
-                <div key={q.id} className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="text-indigo-400 font-semibold">{q.topic}</span>
-                      <span className="text-slate-500">·</span>
-                      <span className="capitalize text-slate-400">{q.difficulty}</span>
-                      <span className="text-slate-500">·</span>
-                      <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-amber-300">
-                        SOURCE: {q.source.toUpperCase()}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => approveQuestion(q.id, activeFaculty.name)}
-                        className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-colors"
-                      >
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        <span>Approve</span>
-                      </button>
-
-                      <button
-                        onClick={() => rejectQuestion(q.id, activeFaculty.name)}
-                        className="flex items-center gap-1 px-3 py-1 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors"
-                      >
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>Reject</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <h5 className="font-semibold text-white text-sm">{q.questionText}</h5>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    {q.options.map((opt, idx) => (
-                      <div
-                        key={idx}
-                        className={`p-2 rounded-lg border ${
-                          idx === q.correctOptionIndex
-                            ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300 font-medium'
-                            : 'bg-slate-950 border-slate-800 text-slate-400'
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {manualOptions.map((opt, i) => (
+                    <div key={i}>
+                      <label className="block text-[11px] mb-1 font-semibold">
+                        Option {String.fromCharCode(65 + i)}
+                      </label>
+                      <input
+                        type="text"
+                        value={opt}
+                        onChange={(e) => {
+                          const copy = [...manualOptions];
+                          copy[i] = e.target.value;
+                          setManualOptions(copy);
+                        }}
+                        className={`w-full border rounded-lg px-2.5 py-1.5 text-xs outline-none ${
+                          isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                         }`}
-                      >
-                        <span className="font-bold mr-1.5">{String.fromCharCode(65 + idx)}.</span>
-                        <span>{opt}</span>
-                      </div>
-                    ))}
-                  </div>
+                        required
+                      />
+                    </div>
+                  ))}
+                </div>
 
-                  <div className="text-[11px] text-slate-400 bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
-                    <span className="font-semibold text-slate-300">Explanation: </span>
-                    {q.explanation}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] mb-1 font-semibold">Correct Option</label>
+                    <select
+                      value={manualCorrect}
+                      onChange={(e) => setManualCorrect(Number(e.target.value))}
+                      className={`w-full border rounded-lg px-2.5 py-1.5 text-xs outline-none ${
+                        isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
+                    >
+                      <option value={0}>Option A</option>
+                      <option value={1}>Option B</option>
+                      <option value={2}>Option C</option>
+                      <option value={3}>Option D</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] mb-1 font-semibold">Pedagogical Explanation</label>
+                    <input
+                      type="text"
+                      value={manualExplanation}
+                      onChange={(e) => setManualExplanation(e.target.value)}
+                      className={`w-full border rounded-lg px-2.5 py-1.5 text-xs outline-none ${
+                        isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                      }`}
+                      placeholder="Why this answer is mathematically / programmatically correct..."
+                    />
                   </div>
                 </div>
-              ))
+
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold cursor-pointer"
+                >
+                  Save to Question Bank
+                </button>
+              </form>
+            )}
+
+            {/* Questions Table/List */}
+            <div className="space-y-3">
+              {approvedQuestions.map((q) => (
+                <div
+                  key={q.id}
+                  className={`p-4 rounded-xl border space-y-2 transition-colors ${
+                    isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-indigo-500 font-bold">{q.topic}</span>
+                      <span className="text-slate-400">·</span>
+                      <span className="capitalize text-slate-500">{q.difficulty}</span>
+                      <span className="text-slate-400">·</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-bold">
+                        APPROVED
+                      </span>
+                    </div>
+                  </div>
+                  <h5 className="font-bold text-sm">{q.questionText}</h5>
+                  <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    <span className="font-semibold text-emerald-500">Correct Answer: </span>
+                    {q.options[q.correctOptionIndex]}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. AI Approval Queue */}
+      {activeTab === 'ai_queue' && (
+        <div className="space-y-6">
+          <div
+            className={`p-6 rounded-2xl border space-y-4 transition-colors ${
+              isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b">
+              <div>
+                <h4 className="text-base font-bold flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-indigo-500" />
+                  <span>AI Approval Queue ({pendingQuestions.length} Pending Verification)</span>
+                </h4>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Strict Quality Gate: Questions generated by Gemini AI must be verified by faculty before reaching students.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Topic filter for pending queue */}
+                {availableQueueTopics.length > 0 && (
+                  <select
+                    value={queueTopicFilter}
+                    onChange={(e) => setQueueTopicFilter(e.target.value)}
+                    className={`text-xs px-2.5 py-2 rounded-xl border outline-hidden ${
+                      isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    <option value="all">All Topics ({questions.filter((q) => q.status === 'pending_approval').length})</option>
+                    {availableQueueTopics.map((top) => (
+                      <option key={top} value={top}>
+                        {top}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <button
+                  onClick={handleGenerateQuestions}
+                  disabled={generatingAi}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  <Sparkles className={`w-3.5 h-3.5 ${generatingAi ? 'animate-spin' : ''}`} />
+                  <span>{generatingAi ? 'Generating via Gemini...' : 'Generate 3 More via AI'}</span>
+                </button>
+              </div>
+            </div>
+
+            {genNotice && (
+              <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs">
+                {genNotice}
+              </div>
+            )}
+
+            {pendingQuestions.length === 0 ? (
+              <div
+                className={`p-8 rounded-xl border text-center text-xs ${
+                  isDark ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}
+              >
+                All caught up! No questions are currently awaiting verification in this filter view.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {pendingQuestions.map((q) => (
+                  <div
+                    key={q.id}
+                    className={`p-4 rounded-xl border space-y-3 transition-colors ${
+                      isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-indigo-500 font-bold">{q.topic}</span>
+                        <span className="text-slate-400">·</span>
+                        <span className="capitalize">{q.difficulty}</span>
+                        <span className="text-slate-400">·</span>
+                        <span className="text-[10px] bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded font-bold">
+                          AI GENERATED
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => approveQuestion(q.id, activeFaculty.name)}
+                          className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>Approve</span>
+                        </button>
+
+                        <button
+                          onClick={() => rejectQuestion(q.id, activeFaculty.name)}
+                          className="flex items-center gap-1 px-3 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span>Reject</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <h5 className="font-bold text-sm">{q.questionText}</h5>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {q.options.map((opt, idx) => (
+                        <div
+                          key={idx}
+                          className={`p-2 rounded-lg border ${
+                            idx === q.correctOptionIndex
+                              ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 font-bold'
+                              : isDark
+                              ? 'bg-slate-900 border-slate-800 text-slate-300'
+                              : 'bg-white border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          <span className="font-bold mr-1.5">{String.fromCharCode(65 + idx)}.</span>
+                          <span>{opt}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div
+                      className={`text-[11px] p-2.5 rounded-lg border ${
+                        isDark
+                          ? 'bg-slate-900 border-slate-800 text-slate-300'
+                          : 'bg-white border-slate-200 text-slate-700'
+                      }`}
+                    >
+                      <span className="font-bold text-indigo-500">Explanation: </span>
+                      {q.explanation}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
       )}
 
-      {/* 3. Syllabus Management */}
+      {/* 7. Syllabus Management */}
       {activeTab === 'syllabus' && (
         <div className="space-y-6">
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800">
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <BookOpen className="w-4 h-4 text-emerald-400" />
-              <span>Syllabus Pacing & Taught Topics Gatekeeper</span>
-            </h4>
-            <p className="text-xs text-slate-400 mb-6">
-              Daily quiz questions are restricted to topics flagged as "Taught" below. Update week statuses as you teach each module.
-            </p>
+          <div
+            className={`p-6 rounded-2xl border space-y-4 transition-colors ${
+              isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+            }`}
+          >
+            <div>
+              <h4 className="text-base font-bold flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-emerald-500" />
+                <span>Syllabus Pacing & Taught Topics Gatekeeper</span>
+              </h4>
+              <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                Daily quiz questions are restricted to topics flagged as "Taught" below.
+              </p>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {syllabusList.map((subject) => (
-                <div key={subject.id} className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div
+                  key={subject.id}
+                  className={`p-4 rounded-xl border space-y-3 transition-colors ${
+                    isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between pb-2 border-b">
                     <div>
-                      <h5 className="font-bold text-white text-sm">{subject.name}</h5>
-                      <div className="text-[11px] text-slate-400">{subject.code} · In charge: {subject.facultyInCharge}</div>
+                      <h5 className="font-bold text-sm">{subject.name}</h5>
+                      <div className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {subject.code} · In charge: {subject.facultyInCharge}
+                      </div>
                     </div>
                   </div>
 
@@ -909,26 +1481,30 @@ export const FacultyDashboard: React.FC = () => {
                     {subject.weeks.map((week) => (
                       <div
                         key={week.weekNumber}
-                        className="p-2.5 rounded-lg bg-slate-900 border border-slate-800/80 flex items-center justify-between text-xs"
+                        className={`p-2.5 rounded-lg border flex items-center justify-between text-xs transition-colors ${
+                          isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+                        }`}
                       >
                         <div>
-                          <div className="text-white font-medium">
+                          <div className="font-bold">
                             Week {week.weekNumber}: {week.topic}
                           </div>
-                          <div className="text-[10px] text-slate-400">
+                          <div className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                             {week.learningObjectives.join(' · ')}
                           </div>
                         </div>
 
                         <button
                           onClick={() => toggleSyllabusTopicTaught(subject.id, week.weekNumber)}
-                          className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-colors shrink-0 ml-2 ${
+                          className={`px-3 py-1 rounded-md text-[11px] font-bold transition-colors shrink-0 ml-2 cursor-pointer ${
                             week.isTaught
-                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                              : 'bg-slate-800 text-slate-400 hover:text-white'
+                              ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40'
+                              : isDark
+                              ? 'bg-slate-800 text-slate-400 hover:text-white'
+                              : 'bg-slate-200 text-slate-600 hover:text-slate-900'
                           }`}
                         >
-                          {week.isTaught ? 'Taught (Active in Quiz)' : 'Upcoming'}
+                          {week.isTaught ? 'Taught' : 'Upcoming'}
                         </button>
                       </div>
                     ))}
@@ -940,119 +1516,214 @@ export const FacultyDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* 4. Quiet Students At-Risk */}
+      {/* 8. Quiet Students */}
       {activeTab === 'quiet' && (
-        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-          <div className="flex items-center justify-between">
+        <div
+          className={`p-6 rounded-2xl border space-y-4 transition-colors ${
+            isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
             <div>
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5 text-amber-400">
+              <h4 className="text-base font-bold flex items-center gap-2 text-amber-500">
                 <Clock className="w-4 h-4" />
-                <span>Quiet Students Inactive for 5+ Days</span>
+                <span>Quiet Students Inactive for 5+ Days ({quietStudents.length} Students in Cohort)</span>
               </h4>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Catch mid-semester drop-off before students disengage. Send supportive nudges without public shaming.
+              <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                Send supportive non-punitive nudges encouraging students to restart micro-quizzes.
               </p>
             </div>
-            <span className="text-xs text-slate-400 tabular-nums">
-              {quietStudents.length} Students Flagged
-            </span>
+
+            {quietStudents.length > 0 && (
+              <button
+                onClick={handleBroadcastNudgeAllQuiet}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-xs transition-colors shrink-0 cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Broadcast Nudge to All ({quietStudents.length})</span>
+              </button>
+            )}
           </div>
 
-          <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-900 text-slate-400 font-medium border-b border-slate-800">
-                <tr>
-                  <th className="py-3 px-4">Student</th>
-                  <th className="py-3 px-4">Campus & Section</th>
-                  <th className="py-3 px-4">Last Activity</th>
-                  <th className="py-3 px-4">Total XP</th>
-                  <th className="py-3 px-4 text-right">Supportive Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {quietStudents.slice(0, 10).map((std) => (
-                  <tr key={std.id} className="hover:bg-slate-900/40">
-                    <td className="py-3 px-4">
-                      <div className="font-semibold text-white">{std.name}</div>
-                      <div className="text-[10px] text-slate-500">{std.email}</div>
-                    </td>
-                    <td className="py-3 px-4 text-slate-300">
-                      {std.campus} · {std.section}
-                    </td>
-                    <td className="py-3 px-4 text-amber-400 font-mono text-[11px]">
-                      {std.lastActiveDate}
-                    </td>
-                    <td className="py-3 px-4 text-slate-300 tabular-nums">
-                      {std.totalXp} XP
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => sendFacultyNudge(std.id)}
-                        className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-semibold ml-auto transition-colors"
-                      >
-                        <Send className="w-3 h-3" />
-                        <span>Send Nudge</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {broadcastNudgeNotice && (
+            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-400 text-xs flex items-center gap-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+              <span>{broadcastNudgeNotice}</span>
+            </div>
+          )}
+
+          {quietStudents.length === 0 ? (
+            <div
+              className={`p-8 rounded-xl border text-center text-xs ${
+                isDark ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
+              }`}
+            >
+              🎉 Fantastic engagement! No students in this filtered group are currently inactive for 5+ days.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {quietStudents.map((s) => (
+                <div
+                  key={s.id}
+                  className={`p-3.5 rounded-xl border flex items-center justify-between gap-4 transition-colors ${
+                    isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div>
+                    <div className="font-bold text-xs">{s.name}</div>
+                    <div className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {s.campus} · {s.year} · Section {s.section} · Last Active: {s.lastActiveDate}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      sendFacultyNudge(s.id);
+                      setBroadcastNudgeNotice(`Nudge sent to ${s.name}!`);
+                      setTimeout(() => setBroadcastNudgeNotice(null), 3000);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Send Nudge</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* 5. Faculty XP Override */}
+      {/* 9. Faculty XP Override & Audit Console */}
       {activeTab === 'audit' && (
-        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+        <div
+          className={`p-6 rounded-2xl border space-y-4 transition-colors ${
+            isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+          }`}
+        >
           <div>
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5 text-rose-400">
+            <h4 className="text-base font-bold flex items-center gap-2 text-rose-500">
               <ShieldAlert className="w-4 h-4" />
-              <span>Faculty Authority XP Override</span>
+              <span>Faculty Academic Integrity & XP Void Console</span>
             </h4>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Invariant: Faculty override ALWAYS wins. Void suspicious or unearned XP with a mandatory logged reason. Student totals adjust immediately.
+            <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              Void suspicious XP entries with a mandatory logged reason. The student's XP will be immediately recomputed.
             </p>
           </div>
 
-          <form onSubmit={handleVoidXp} className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 max-w-lg">
+          {voidNotice && (
+            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-400 text-xs">
+              {voidNotice}
+            </div>
+          )}
+
+          <form
+            onSubmit={handleVoidXp}
+            className={`p-4 rounded-xl border space-y-3 ${
+              isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
+            }`}
+          >
             <div>
-              <label className="block text-[11px] text-slate-400 mb-1">Ledger Entry ID to Void</label>
+              <label className="block text-xs font-bold mb-1">Ledger Entry ID to Void</label>
               <input
                 type="text"
                 value={voidLedgerId}
                 onChange={(e) => setVoidLedgerId(e.target.value)}
-                placeholder="e.g. led_maya_01 or led_rahul_04"
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+                placeholder="e.g. led_1001 or select from recent filtered ledger below"
+                className={`w-full border rounded-lg px-3 py-2 text-xs outline-none ${
+                  isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                }`}
                 required
               />
             </div>
 
             <div>
-              <label className="block text-[11px] text-slate-400 mb-1">Mandatory Override Reason (Logged publicly)</label>
-              <textarea
+              <label className="block text-xs font-bold mb-1">Official Reason for Voiding</label>
+              <input
+                type="text"
                 value={voidReason}
                 onChange={(e) => setVoidReason(e.target.value)}
-                placeholder="State verified academic reason (e.g. In-class plagiarism, invalid test certificate)..."
-                rows={3}
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-white"
+                placeholder="e.g. Detected rapid automated speed-clicking without solving"
+                className={`w-full border rounded-lg px-3 py-2 text-xs outline-none ${
+                  isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                }`}
                 required
               />
             </div>
 
             <button
               type="submit"
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold"
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg cursor-pointer"
             >
-              Execute Faculty Void Override
+              Void Entry & Recompute Student XP
             </button>
           </form>
 
-          {voidNotice && (
-            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
-              {voidNotice}
+          {/* Filtered Student Ledger Entries */}
+          <div className="space-y-2 pt-2">
+            <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Recent Verifiable Ledger Entries for Filtered Cohort ({cohortLedger.length})
+            </h5>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+              <table className="w-full text-left text-xs">
+                <thead className={`font-semibold border-b ${isDark ? 'bg-slate-950/60 border-slate-800 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+                  <tr>
+                    <th className="py-2.5 px-3">Entry ID</th>
+                    <th className="py-2.5 px-3">Student</th>
+                    <th className="py-2.5 px-3">Action</th>
+                    <th className="py-2.5 px-3 text-right">Points</th>
+                    <th className="py-2.5 px-3 text-center">Status</th>
+                    <th className="py-2.5 px-3 text-right">Quick Void</th>
+                  </tr>
+                </thead>
+                <tbody className={`divide-y ${isDark ? 'divide-slate-800/80' : 'divide-slate-100'}`}>
+                  {cohortLedger.slice(0, 15).map((entry) => {
+                    const student = students.find((s) => s.id === entry.studentId);
+                    return (
+                      <tr key={entry.id} className={isDark ? 'hover:bg-slate-800/30' : 'hover:bg-slate-50'}>
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-slate-400">{entry.id}</td>
+                        <td className="py-2.5 px-3 font-medium">
+                          {student?.name || entry.studentId}
+                          <span className="block text-[10px] text-slate-400 font-mono">
+                            {student?.campus} · Sec {student?.section}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-[11px]">{entry.actionKey}</td>
+                        <td className="py-2.5 px-3 text-right font-bold text-emerald-500 tabular-nums">
+                          +{entry.points} XP
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              entry.status === 'valid'
+                                ? 'bg-emerald-500/10 text-emerald-500'
+                                : 'bg-rose-500/10 text-rose-500'
+                            }`}
+                          >
+                            {entry.status.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          {entry.status === 'valid' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setVoidLedgerId(entry.id);
+                                setVoidReason('Faculty manual review flag');
+                              }}
+                              className="text-[11px] font-semibold text-rose-500 hover:underline"
+                            >
+                              Select
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>

@@ -31,8 +31,8 @@ import {
 } from 'lucide-react';
 
 export const InbuiltCodeCompiler: React.FC = () => {
-  const { activeStudent, triggerXpEvent, allCodingProblems, theme } = useApp();
-  const isDark = theme === 'dark';
+  const { activeStudent, triggerXpEvent, allCodingProblems, isDark } = useApp();
+
 
   const [showSearchModal, setShowSearchModal] = useState<boolean>(false);
 
@@ -228,7 +228,7 @@ export const InbuiltCodeCompiler: React.FC = () => {
             </span>
           </h2>
           <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-            Practice curated algorithmic challenges from LeetCode, HackerRank, and Codeforces directly inside MSOT LevelUp.
+            Practice curated algorithmic challenges from LeetCode, HackerRank, and Codeforces directly inside MSOT MiraiQuest.
             Execute unit tests in real time and submit verified solutions for official XP.
           </p>
         </div>

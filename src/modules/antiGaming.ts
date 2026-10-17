@@ -1,5 +1,5 @@
 /**
- * LevelUp Anti-Gaming & Academic Integrity Module
+ * MiraiQuest Anti-Gaming & Academic Integrity Module
  * -------------------------------------------------------------
  * Detects and prevents cheating patterns:
  * 1. Rapid-fire answering (bot / speed clicking)

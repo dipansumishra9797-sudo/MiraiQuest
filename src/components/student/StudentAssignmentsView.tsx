@@ -31,10 +31,9 @@ export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
     assignmentSubmissions,
     submitAssignment,
     activeStudent,
-    theme,
+    isDark,
   } = useApp();
 
-  const isDark = theme === 'dark';
 
   // Submission modal state
   const [selectedAsgnToSubmit, setSelectedAsgnToSubmit] = useState<Assignment | null>(null);

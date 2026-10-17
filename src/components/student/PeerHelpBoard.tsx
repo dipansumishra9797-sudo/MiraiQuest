@@ -3,7 +3,7 @@ import { useApp } from '../../store/appStore';
 import { MessageSquare, CheckCircle, Plus, Send, HelpCircle, Shield } from 'lucide-react';
 
 export const PeerHelpBoard: React.FC = () => {
-  const { peerPosts, activeStudent, addPeerPost, answerPeerDoubt, acceptPeerAnswer } = useApp();
+  const { peerPosts, activeStudent, role, addPeerPost, answerPeerDoubt, acceptPeerAnswer, isDark } = useApp();
 
   const [showAskModal, setShowAskModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -13,6 +13,20 @@ export const PeerHelpBoard: React.FC = () => {
 
   const [activeReplyPostId, setActiveReplyPostId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
+  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleAcceptAnswer = async (postId: string, answerId: string) => {
+    setActionMessage(null);
+    const result = await acceptPeerAnswer(postId, answerId);
+    if (result.success) {
+      setActionMessage({ type: 'success', text: result.message });
+    } else {
+      setActionMessage({ type: 'error', text: result.message });
+    }
+    setTimeout(() => setActionMessage(null), 6000);
+  };
+
+  const isFaculty = role === 'faculty' || role === 'admin';
 
   const handleCreatePost = (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,41 +44,73 @@ export const PeerHelpBoard: React.FC = () => {
     setActiveReplyPostId(null);
   };
 
+  const cardBg = isDark
+    ? 'bg-slate-900 border-slate-800 text-white'
+    : 'bg-white border-slate-200 text-slate-900 shadow-xs';
+  const subCardBg = isDark
+    ? 'bg-slate-950 border-slate-800'
+    : 'bg-slate-50 border-slate-200';
+  const inputBg = isDark
+    ? 'bg-slate-950 border-slate-800 text-white focus:border-indigo-500'
+    : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-500';
+
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors ${cardBg}`}>
         <div>
-          <h4 className="text-sm font-bold text-white flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-indigo-400" />
+          <h4 className="text-sm font-bold flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-indigo-500" />
             <span>Peer Discussion & Doubts Forum</span>
           </h4>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Earn 15 verified XP when your clear answer is accepted by the asker or faculty (max 3/day · self-answers ineligible).
+          <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+            Asker accepts the best solution (15 XP awarded to accepted helper, max 3/day). Once awarded, choice is locked.
           </p>
         </div>
 
         <button
           onClick={() => setShowAskModal(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors self-start sm:self-auto"
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors self-start sm:self-auto shadow-xs cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Post a Learning Doubt</span>
         </button>
       </div>
 
+      {/* Action Notification Banner */}
+      {actionMessage && (
+        <div
+          className={`p-3.5 rounded-xl text-xs font-semibold border flex items-center justify-between animate-in fade-in ${
+            actionMessage.type === 'success'
+              ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-300'
+              : 'bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 shrink-0" />
+            <span>{actionMessage.text}</span>
+          </div>
+          <button
+            onClick={() => setActionMessage(null)}
+            className="text-xs font-bold underline cursor-pointer ml-3"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Ask Question Modal */}
       {showAskModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
-            <h4 className="text-base font-bold text-white mb-4">Post a Technical Doubt</h4>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className={`w-full max-w-lg border rounded-2xl p-6 shadow-2xl transition-colors ${cardBg}`}>
+            <h4 className="text-base font-bold mb-4">Post a Technical Doubt</h4>
             <form onSubmit={handleCreatePost} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Subject</label>
+                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Subject</label>
                 <select
                   value={newSubject}
                   onChange={(e) => setNewSubject(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+                  className={`w-full border rounded-lg px-3 py-2 text-xs outline-hidden ${inputBg}`}
                 >
                   <option value="Data Structures & Algorithms">Data Structures & Algorithms</option>
                   <option value="Python Programming">Python Programming</option>
@@ -72,36 +118,36 @@ export const PeerHelpBoard: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Topic</label>
+                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Topic</label>
                 <input
                   type="text"
                   value={newTopic}
                   onChange={(e) => setNewTopic(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+                  className={`w-full border rounded-lg px-3 py-2 text-xs outline-hidden ${inputBg}`}
                   placeholder="e.g. Monotonic Stack, Python MRO"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Doubt Title</label>
+                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Doubt Title</label>
                 <input
                   type="text"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+                  className={`w-full border rounded-lg px-3 py-2 text-xs outline-hidden ${inputBg}`}
                   placeholder="What is your core confusion?"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Explanation & Code Snippet</label>
+                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Explanation & Code Snippet</label>
                 <textarea
                   value={newBody}
                   onChange={(e) => setNewBody(e.target.value)}
                   rows={4}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white"
+                  className={`w-full border rounded-lg px-3 py-2 text-xs outline-hidden ${inputBg}`}
                   placeholder="Provide context, what you tried, and expected behavior..."
                   required
                 />
@@ -111,13 +157,13 @@ export const PeerHelpBoard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAskModal(false)}
-                  className="px-3.5 py-2 text-xs text-slate-400 hover:text-white"
+                  className={`px-3.5 py-2 text-xs ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs"
                 >
                   Publish Doubt
                 </button>
@@ -134,76 +180,91 @@ export const PeerHelpBoard: React.FC = () => {
           const hasAcceptedAnswer = post.answers.some((a) => a.isAccepted);
 
           return (
-            <div key={post.id} className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+            <div key={post.id} className={`p-5 rounded-xl border space-y-4 transition-colors ${cardBg}`}>
               {/* Question Header */}
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2 text-xs text-slate-400">
-                    <span className="font-semibold text-indigo-400">{post.subject}</span>
+                  <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    <span className="font-semibold text-indigo-500">{post.subject}</span>
                     <span>·</span>
                     <span>{post.topic}</span>
                     <span>·</span>
-                    <span className="text-slate-500">{post.authorName} ({post.authorCampus})</span>
+                    <span className={isDark ? 'text-slate-500' : 'text-slate-400'}>{post.authorName} ({post.authorCampus})</span>
                   </div>
 
                   {hasAcceptedAnswer && (
-                    <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1">
+                    <span className="text-[11px] font-semibold text-emerald-500 flex items-center gap-1">
                       <CheckCircle className="w-3.5 h-3.5" /> Solved
                     </span>
                   )}
                 </div>
 
-                <h4 className="text-base font-semibold text-white mb-1.5">{post.title}</h4>
-                <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">{post.body}</p>
+                <h4 className="text-base font-semibold mb-1.5">{post.title}</h4>
+                <p className={`text-xs leading-relaxed whitespace-pre-wrap ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{post.body}</p>
               </div>
 
               {/* Answers */}
-              <div className="pt-3 border-t border-slate-800 space-y-3">
-                <div className="text-xs font-semibold text-slate-400">
-                  {post.answers.length} {post.answers.length === 1 ? 'Answer' : 'Answers'}
+              <div className={`pt-3 border-t space-y-3 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                <div className={`text-xs font-semibold flex items-center justify-between ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  <span>
+                    {post.answers.length} {post.answers.length === 1 ? 'Answer' : 'Answers'}
+                  </span>
+                  {post.isLocked && (
+                    <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
+                      <Shield className="w-3 h-3 text-emerald-500" /> Resolution Locked (XP Awarded)
+                    </span>
+                  )}
                 </div>
 
-                {post.answers.map((ans) => {
-                  const canAccept = (isAuthor || activeStudent.id === 'fac_priya_nair') && !ans.isAccepted && ans.authorId !== activeStudent.id;
+                {[...post.answers]
+                  .sort((a, b) => (b.isAccepted ? 1 : 0) - (a.isAccepted ? 1 : 0))
+                  .map((ans) => {
+                    const canAccept =
+                      (isAuthor || isFaculty) &&
+                      !ans.isAccepted &&
+                      ans.authorId !== activeStudent.id &&
+                      !post.isLocked;
 
-                  return (
-                    <div
-                      key={ans.id}
-                      className={`p-3.5 rounded-xl text-xs space-y-2 border ${
-                        ans.isAccepted
-                          ? 'bg-emerald-500/10 border-emerald-500/30'
-                          : 'bg-slate-950 border-slate-800/80'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-white">{ans.authorName}</span>
-                          <span className="text-slate-500 text-[10px]">· {ans.authorCampus}</span>
-                          {ans.isAccepted && (
-                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <CheckCircle className="w-3 h-3" /> Accepted Answer (+15 XP Awarded)
-                            </span>
-                          )}
+                    return (
+                      <div
+                        key={ans.id}
+                        className={`p-3.5 rounded-xl text-xs space-y-2 border transition-all ${
+                          ans.isAccepted
+                            ? isDark
+                              ? 'bg-emerald-950/30 border-emerald-500/40 ring-1 ring-emerald-500/30'
+                              : 'bg-emerald-50 border-emerald-300 text-slate-900 shadow-xs'
+                            : subCardBg
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold">{ans.authorName}</span>
+                            <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>· {ans.authorCampus}</span>
+                            {ans.isAccepted && (
+                              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                                <CheckCircle className="w-3 h-3 text-emerald-500" /> Accepted Answer (+15 XP Awarded)
+                              </span>
+                            )}
+                          </div>
+                          <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{ans.timestamp}</span>
                         </div>
-                        <span className="text-[10px] text-slate-500">{ans.timestamp}</span>
+
+                        <p className={`leading-relaxed whitespace-pre-wrap ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{ans.body}</p>
+
+                        {canAccept && (
+                          <div className="pt-2 flex justify-end">
+                            <button
+                              onClick={() => handleAcceptAnswer(post.id, ans.id)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              <span>Accept Answer (Award +15 XP)</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
-
-                      <p className="text-slate-300 leading-relaxed whitespace-pre-wrap">{ans.body}</p>
-
-                      {canAccept && (
-                        <div className="pt-1 flex justify-end">
-                          <button
-                            onClick={() => acceptPeerAnswer(post.id, ans.id)}
-                            className="flex items-center gap-1 px-3 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 rounded-md text-[11px] font-semibold transition-colors"
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            <span>Mark Accepted & Award 15 XP to {ans.authorName}</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
 
                 {/* Reply Input */}
                 {activeReplyPostId === post.id ? (
@@ -213,7 +274,7 @@ export const PeerHelpBoard: React.FC = () => {
                       onChange={(e) => setReplyText(e.target.value)}
                       placeholder="Write your constructive explanation..."
                       rows={3}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                      className={`w-full border rounded-xl p-3 text-xs outline-hidden ${inputBg}`}
                     />
                     <div className="flex justify-end gap-2">
                       <button
@@ -221,13 +282,13 @@ export const PeerHelpBoard: React.FC = () => {
                           setActiveReplyPostId(null);
                           setReplyText('');
                         }}
-                        className="px-3 py-1 text-xs text-slate-400 hover:text-white"
+                        className={`px-3 py-1 text-xs ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`}
                       >
                         Cancel
                       </button>
                       <button
                         onClick={() => handleSendReply(post.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs"
                       >
                         <Send className="w-3 h-3" />
                         <span>Post Answer</span>
@@ -237,7 +298,7 @@ export const PeerHelpBoard: React.FC = () => {
                 ) : (
                   <button
                     onClick={() => setActiveReplyPostId(post.id)}
-                    className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold"
+                    className="text-xs text-indigo-500 hover:text-indigo-600 font-semibold"
                   >
                     + Answer this Doubt
                   </button>
