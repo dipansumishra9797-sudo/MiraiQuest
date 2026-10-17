@@ -2,6 +2,7 @@ import {
   AuditFlag,
   Badge,
   Campus,
+  AcademicYear,
   FacultyProfile,
   LedgerEntry,
   PeerHelpPost,
@@ -17,7 +18,7 @@ import {
   AssignmentSubmission,
 } from '../types';
 
-export const CAMPUSES: Campus[] = ['HI-Tech', 'Rathinam', 'RGIB', 'JUJ'];
+export const CAMPUSES: Campus[] = ['HI-Tech', 'Rathinam', 'JUJ'];
 
 export const INITIAL_RULES: XpRule[] = [
   {
@@ -55,7 +56,7 @@ export const INITIAL_RULES: XpRule[] = [
     dailyCap: 1,
     active: true,
     description: '15 base XP + 5 XP per correct answer. 1 official attempt per day on topics taught that week.',
-    verificationSource: 'LevelUp In-App Quiz Engine',
+    verificationSource: 'MiraiQuest In-App Quiz Engine',
     lastUpdated: '2026-10-01',
     updatedBy: 'Dean Vikram Rao',
   },
@@ -133,7 +134,7 @@ export const INITIAL_RULES: XpRule[] = [
     dailyCap: 1,
     active: true,
     description: '100 XP for completing the timed pre-exam revision gauntlet.',
-    verificationSource: 'LevelUp Boss Gauntlet Engine',
+    verificationSource: 'MiraiQuest Boss Gauntlet Engine',
     lastUpdated: '2026-10-01',
     updatedBy: 'Prof. Priya Nair',
   },
@@ -162,7 +163,7 @@ export const INITIAL_FACULTY: FacultyProfile[] = [
     id: 'fac_meera_joshi',
     name: 'Prof. Meera Joshi',
     email: 'meera.joshi@msot.edu',
-    campus: 'RGIB',
+    campus: 'Rathinam',
     department: 'Computer Science',
     assignedSections: ['CS-C', 'AI-A'],
     subjects: ['Data Structures & Algorithms', 'Python Programming'],
@@ -1121,20 +1122,30 @@ export const INITIAL_QUESTS: Quest[] = [
   },
 ];
 
-// Pre-seeded 60 Demo Students Across 4 Campuses
+// Pre-seeded Demo Students Across Campuses
 export const INITIAL_STUDENTS: StudentProfile[] = [
   // 1. Bottom-quartile student showcasing fairness & comeback mechanics
   {
     id: 'std_rahul_verma',
     name: 'Rahul Verma',
+    nickname: 'RahulV',
+    bio: 'Passionate about algorithms, Python, and low-latency system design. Working hard to climb the Bronze league!',
+    dateOfBirth: '2004-06-15',
+    gender: 'Male',
     email: 'rahul.verma@msot.edu',
+    phoneNumber: '+91 98765 43210',
+    city: 'Coimbatore',
+    skills: ['DSA', 'Python', 'React', 'FastAPI', 'Problem Solving'],
     rollNumber: 'MSOT-24-042',
     campus: 'Rathinam',
+    year: '2nd Year',
     section: 'CS-B',
     avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
     anonymousNickname: 'QuietLynx_42',
     isAnonymous: false,
     optOutOfLeaderboards: false,
+    shareSocialLinksWithBatchmates: true,
+    acceptedAnswerCount: 4,
     totalXp: 215,
     level: 2,
     coinsBalance: 160,
@@ -1148,6 +1159,12 @@ export const INITIAL_STUDENTS: StudentProfile[] = [
     previousWeeklyXp: 45, // Massive 155% personal best improvement!
     unlockedBadgeIds: ['badge_first_quiz', 'badge_improvement_15', 'badge_comeback_kid'],
     completedQuestIds: ['quest_python_oop'],
+    socialLinks: {
+      linkedin: 'https://linkedin.com/in/rahulverma-msot',
+      github: 'https://github.com/rahulverma-dev',
+      leetcode: 'https://leetcode.com/rahul_codes_msot',
+      portfolio: 'https://rahulverma.dev',
+    },
     codingHandles: {
       leetcode: 'rahul_codes_msot',
       github: 'rahulverma-dev',
@@ -1158,14 +1175,24 @@ export const INITIAL_STUDENTS: StudentProfile[] = [
   {
     id: 'std_maya_sharma',
     name: 'Maya Sharma',
+    nickname: 'MayaS',
+    bio: 'Competitive programmer & machine learning researcher. Always up for algorithmic puzzles and system architecture debates.',
+    dateOfBirth: '2003-11-20',
+    gender: 'Female',
     email: 'maya.sharma@msot.edu',
+    phoneNumber: '+91 98765 88990',
+    city: 'Chennai',
+    skills: ['Python', 'DSA', 'PyTorch', 'C++', 'Dynamic Programming'],
     rollNumber: 'MSOT-23-007',
     campus: 'HI-Tech',
+    year: '3rd Year',
     section: 'CS-A',
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80',
     anonymousNickname: 'SolarPhoenix_99',
     isAnonymous: false,
     optOutOfLeaderboards: false,
+    shareSocialLinksWithBatchmates: true,
+    acceptedAnswerCount: 7,
     totalXp: 1240,
     level: 6,
     coinsBalance: 420,
@@ -1179,6 +1206,11 @@ export const INITIAL_STUDENTS: StudentProfile[] = [
     previousWeeklyXp: 260,
     unlockedBadgeIds: ['badge_first_quiz', 'badge_streak_7', 'badge_level_5', 'badge_coding_century'],
     completedQuestIds: ['quest_recursion_master', 'quest_python_oop', 'quest_consistent_scholar'],
+    socialLinks: {
+      linkedin: 'https://linkedin.com/in/mayasharma-ai',
+      github: 'https://github.com/mayasharma-ai',
+      leetcode: 'https://leetcode.com/maya_sharma_algos',
+    },
     codingHandles: {
       leetcode: 'maya_sharma_algos',
       codeforces: 'maya_cf',
@@ -1190,14 +1222,24 @@ export const INITIAL_STUDENTS: StudentProfile[] = [
   {
     id: 'std_arjun_patel',
     name: 'Arjun Patel',
+    nickname: 'ArjunP',
+    bio: 'CS junior fascinated by graph theory, distributed databases, and high-performance backend microservices.',
+    dateOfBirth: '2003-09-12',
+    gender: 'Male',
     email: 'arjun.patel@msot.edu',
+    phoneNumber: '+91 98765 11223',
+    city: 'Bengaluru',
+    skills: ['DSA', 'Java', 'Graphs', 'Go', 'Distributed Systems'],
     rollNumber: 'MSOT-23-018',
     campus: 'HI-Tech',
+    year: '3rd Year',
     section: 'CS-A',
     avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=160&q=80',
     anonymousNickname: 'CyberFalcon_18',
     isAnonymous: true, // Demonstrating anonymous mode!
     optOutOfLeaderboards: false,
+    shareSocialLinksWithBatchmates: true,
+    acceptedAnswerCount: 3,
     totalXp: 780,
     level: 4,
     coinsBalance: 240,
@@ -1211,6 +1253,10 @@ export const INITIAL_STUDENTS: StudentProfile[] = [
     previousWeeklyXp: 180,
     unlockedBadgeIds: ['badge_first_quiz', 'badge_streak_7'],
     completedQuestIds: ['quest_python_oop'],
+    socialLinks: {
+      github: 'https://github.com/arjunpatel-cs',
+      leetcode: 'https://leetcode.com/arjun_patel_23',
+    },
     codingHandles: {
       leetcode: 'arjun_patel_23',
       github: 'arjunpatel-cs',
@@ -1221,14 +1267,24 @@ export const INITIAL_STUDENTS: StudentProfile[] = [
   {
     id: 'std_sneha_kulkarni',
     name: 'Sneha Kulkarni',
+    nickname: 'SnehaK',
+    bio: 'Exploring front-end engineering, UI accessibility, and full-stack web applications.',
+    dateOfBirth: '2005-02-18',
+    gender: 'Female',
     email: 'sneha.k@msot.edu',
+    phoneNumber: '+91 98765 33445',
+    city: 'Pune',
+    skills: ['JavaScript', 'HTML/CSS', 'React', 'TypeScript'],
     rollNumber: 'MSOT-24-099',
-    campus: 'RGIB',
-    section: 'CS-C',
+    campus: 'Rathinam',
+    year: '1st Year',
+    section: 'CS-B',
     avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=160&q=80',
     anonymousNickname: 'StealthFalcon_09',
     isAnonymous: false,
     optOutOfLeaderboards: true, // Opted out of public competition!
+    shareSocialLinksWithBatchmates: false, // Private social links
+    acceptedAnswerCount: 1,
     totalXp: 540,
     level: 3,
     coinsBalance: 190,
@@ -1251,14 +1307,24 @@ export const INITIAL_STUDENTS: StudentProfile[] = [
   {
     id: 'std_aditya_das',
     name: 'Aditya Das',
+    nickname: 'AdiDas',
+    bio: 'Hardware-software co-design & robotics enthusiast.',
+    dateOfBirth: '2004-08-25',
+    gender: 'Male',
     email: 'aditya.das@msot.edu',
+    phoneNumber: '+91 98765 55667',
+    city: 'Kolkata',
+    skills: ['Embedded C', 'Electronics', 'DSA'],
     rollNumber: 'MSOT-24-055',
     campus: 'JUJ',
+    year: '2nd Year',
     section: 'EC-A',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&q=80',
     anonymousNickname: 'ShadowWolf_55',
     isAnonymous: false,
     optOutOfLeaderboards: false,
+    shareSocialLinksWithBatchmates: true,
+    acceptedAnswerCount: 0,
     totalXp: 310,
     level: 2,
     coinsBalance: 80,
@@ -1278,8 +1344,9 @@ export const INITIAL_STUDENTS: StudentProfile[] = [
   },
 ];
 
-// Generate an additional 55 synthetic students distributed realistically across the 4 campuses and sections
-const campusDist: Campus[] = ['HI-Tech', 'Rathinam', 'RGIB', 'JUJ'];
+// Generate an additional 55 synthetic students distributed realistically across the 3 campuses and sections
+const campusDist: Campus[] = ['HI-Tech', 'Rathinam', 'JUJ'];
+const yearsDist: AcademicYear[] = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
 const sectionsDist = ['CS-A', 'CS-B', 'IT-A', 'CS-C', 'AI-A', 'EC-A', 'CS-D'];
 const firstNames = ['Ananya', 'Rohan', 'Tanvi', 'Varun', 'Kavya', 'Siddharth', 'Isha', 'Dev', 'Pooja', 'Aman', 'Nisha', 'Kunal', 'Shruti', 'Harsh', 'Diya', 'Manish', 'Rhea', 'Gaurav', 'Megha', 'Akash', 'Simran', 'Yash', 'Anjali', 'Karthik', 'Swati', 'Nikhil', 'Ritu', 'Pranav'];
 const lastNames = ['Gupta', 'Mehta', 'Chopra', 'Singh', 'Reddy', 'Bansal', 'Iyer', 'Deshmukh', 'Mishra', 'Trivedi', 'Saxena', 'Kapoor', 'Bhatia', 'Nambiar', 'Jadhav', 'Kaur', 'Soni', 'Pandey'];
@@ -1287,6 +1354,7 @@ const leagues: ('Bronze' | 'Silver' | 'Gold' | 'Platinum' | 'Diamond')[] = ['Bro
 
 for (let i = 6; i <= 60; i++) {
   const c = campusDist[i % campusDist.length];
+  const yr = yearsDist[i % yearsDist.length];
   const sec = sectionsDist[i % sectionsDist.length];
   const fn = firstNames[i % firstNames.length];
   const ln = lastNames[i % lastNames.length];
@@ -1300,30 +1368,44 @@ for (let i = 6; i <= 60; i++) {
   INITIAL_STUDENTS.push({
     id: `std_gen_${i}`,
     name: `${fn} ${ln}`,
+    nickname: fn,
+    bio: `Computer Science student passionate about software engineering and collegiate problem solving.`,
+    dateOfBirth: `200${(i % 3) + 3}-0${(i % 9) + 1}-15`,
+    gender: i % 2 === 0 ? 'Female' : 'Male',
     email: `${fn.toLowerCase()}.${ln.toLowerCase()}@msot.edu`,
-    rollNumber: `MSOT-${23 + (i % 2)}-0${i < 10 ? '0' + i : i}`,
+    phoneNumber: `+91 98${(10000000 + i * 37191).toString().slice(0, 8)}`,
+    city: ['Coimbatore', 'Chennai', 'Bengaluru', 'Hyderabad', 'Pune'][i % 5],
+    skills: ['DSA', 'Python', 'C++', 'Web Dev'],
+    rollNumber: `MSOT-${22 + (i % 3)}-${String(i).padStart(3, '0')}`,
     campus: c,
+    year: yr,
     section: sec,
-    avatar: `https://images.unsplash.com/photo-${1500000000000 + i}?auto=format&fit=crop&w=160&q=80`,
-    anonymousNickname: `Scholar_${fn.slice(0, 3)}_${i}`,
+    avatar: `https://images.unsplash.com/photo-${1500000000000 + (i * 791937) % 100000000}?auto=format&fit=crop&w=160&q=80`,
+    anonymousNickname: `${['Cyber', 'Quantum', 'Solar', 'Stealth', 'Hyper', 'Nova'][i % 6]}${['Lynx', 'Phoenix', 'Wolf', 'Falcon', 'Viper', 'Tiger'][i % 6]}_${i}`,
     isAnonymous: isAnon,
-    optOutOfLeaderboards: i === 22,
+    optOutOfLeaderboards: i % 11 === 0,
+    shareSocialLinksWithBatchmates: i % 3 !== 0,
+    acceptedAnswerCount: i % 4,
     totalXp,
-    level: Math.max(1, Math.floor(Math.sqrt(totalXp / 50))),
-    coinsBalance: Math.floor(totalXp * 0.35),
+    level: Math.max(1, Math.floor(Math.sqrt(totalXp / 80))),
+    coinsBalance: Math.floor(totalXp * 0.4),
     streakDays: streak,
-    streakFreezesRemaining: (i % 2) + 1,
-    lastActiveDate: streak > 0 ? '2026-10-13' : '2026-10-09',
+    streakFreezesRemaining: (i % 3) + 1,
+    lastActiveDate: i % 7 === 0 ? '2026-10-06' : '2026-10-13',
     streakCalendar: ['2026-10-11', '2026-10-12', '2026-10-13'],
     league: lg,
-    leagueRank: (i % 15) + 1,
+    leagueRank: (i % 20) + 1,
     weeklyXp,
     previousWeeklyXp: prevWeeklyXp,
-    unlockedBadgeIds: totalXp > 500 ? ['badge_first_quiz', 'badge_streak_7'] : ['badge_first_quiz'],
-    completedQuestIds: ['quest_python_oop'],
+    unlockedBadgeIds: ['badge_first_quiz'],
+    completedQuestIds: [],
+    socialLinks: {
+      github: `https://github.com/${fn.toLowerCase()}${ln.toLowerCase()}`,
+      leetcode: `https://leetcode.com/${fn.toLowerCase()}_${i}`,
+      linkedin: `https://linkedin.com/in/${fn.toLowerCase()}-${ln.toLowerCase()}`,
+    },
     codingHandles: {
-      leetcode: `${fn.toLowerCase()}_${i}`,
-      verifiedProblemsCount: Math.floor(totalXp / 25),
+      verifiedProblemsCount: (i * 3) % 40,
     },
   });
 }
@@ -1516,15 +1598,6 @@ export const INITIAL_BATTLES: TeamBattle[] = [
         normalizedScore: 133.5,
       },
       {
-        teamId: 'team_rgib',
-        teamName: 'RGIB Matrix Pioneers',
-        campusOrSection: 'RGIB',
-        totalRawXp: 1260,
-        participantCount: 12,
-        eligibleStudentCount: 14,
-        normalizedScore: 127.5,
-      },
-      {
         teamId: 'team_juj',
         teamName: 'JUJ Code Phoenixes',
         campusOrSection: 'JUJ',
@@ -1566,7 +1639,7 @@ export const INITIAL_BATTLES: TeamBattle[] = [
         id: 'sub_04',
         studentId: 'std_gen_8',
         studentName: 'Dev Chopra',
-        teamId: 'team_rgib',
+        teamId: 'team_juj',
         problemTitle: 'Reverse Linked List [MEDIUM]',
         points: 20,
         timestamp: '1 hour ago',
@@ -1647,13 +1720,13 @@ export const PAST_BATTLE_MATCHES: PastTeamBattleMatch[] = [
   },
   {
     id: 'match_past_03',
-    title: 'Inter-Campus Quad-Battle: RGIB vs JUJ Data Sprint',
+    title: 'Inter-Campus Quad-Battle: Rathinam vs JUJ Data Sprint',
     date: 'Oct 04, 2026',
     type: 'campus_vs_campus',
     winnerTeam: {
-      name: 'RGIB Matrix Pioneers',
+      name: 'Rathinam Algoknights',
       score: 141.6,
-      campusOrSection: 'RGIB',
+      campusOrSection: 'Rathinam',
     },
     runnerUpTeam: {
       name: 'JUJ Code Phoenixes',
@@ -1666,14 +1739,14 @@ export const PAST_BATTLE_MATCHES: PastTeamBattleMatch[] = [
       {
         studentId: 'std_gen_8',
         studentName: 'Dev Chopra',
-        campusOrSection: 'RGIB · CS-C',
+        campusOrSection: 'Rathinam · CS-B',
         mvpTitle: 'Pointer Architect',
         xpAwarded: 180,
         problemsSolved: 5,
         highlightReason: 'Zero-pointer error rate across linked list cycle and reverse sprint modules.',
       },
     ],
-    summaryNote: 'Highest first-year participant turn-out across all 4 collegiate campuses.',
+    summaryNote: 'Highest first-year participant turn-out across all 3 collegiate campuses.',
   },
 ];
 
@@ -1688,6 +1761,8 @@ export const INITIAL_PEER_POSTS: PeerHelpPost[] = [
     topic: 'Object-Oriented Programming in Python',
     body: 'When I pass a list into a helper method and run lst.append(5), my original list outside also changes. But when I pass an integer x and do x += 1, the outer x remains 0. Can someone explain the exact difference?',
     timestamp: 'Yesterday at 3:15 PM',
+    acceptedAnswerId: 'ans_01_a',
+    isLocked: true,
     answers: [
       {
         id: 'ans_01_a',
@@ -1697,15 +1772,17 @@ export const INITIAL_PEER_POSTS: PeerHelpPost[] = [
         body: 'Integers are immutable in Python, so x += 1 creates a new int object in memory and repoints the local identifier. Lists are mutable in place, so lst.append(5) modifies the underlying heap memory object that both references share.',
         timestamp: 'Yesterday at 3:42 PM',
         isAccepted: true, // Marked accepted! Maya received 15 XP
+        xpAwarded: true,
       },
       {
         id: 'ans_01_b',
         authorId: 'std_gen_10',
         authorName: 'Aman Bansal',
-        authorCampus: 'RGIB',
+        authorCampus: 'JUJ',
         body: 'If you want to prevent mutation, pass a copy instead: func(lst[:]) or func(lst.copy()).',
         timestamp: 'Yesterday at 4:05 PM',
         isAccepted: false,
+        xpAwarded: false,
       },
     ],
   },
@@ -1719,6 +1796,8 @@ export const INITIAL_PEER_POSTS: PeerHelpPost[] = [
     topic: 'Recursion, Call Stacks & Backtracking',
     body: 'In naive fib(n), we say runtime is O(2^n). Why is auxiliary stack space only O(n) and not O(2^n)?',
     timestamp: 'Today at 8:30 AM',
+    acceptedAnswerId: 'ans_02_a',
+    isLocked: true,
     answers: [
       {
         id: 'ans_02_a',
@@ -1728,6 +1807,42 @@ export const INITIAL_PEER_POSTS: PeerHelpPost[] = [
         body: 'Because the computer only maintains one branch of the tree at any given moment! When fib(n-1) returns, its stack frame is popped before fib(n-2) begins. The maximum height of the recursion tree is n, so the call stack never exceeds n frames.',
         timestamp: 'Today at 8:55 AM',
         isAccepted: true, // Rahul earned 15 verified peer-help XP!
+        xpAwarded: true,
+      },
+    ],
+  },
+  {
+    id: 'post_03',
+    studentId: 'std_rahul_verma',
+    authorName: 'Rahul Verma',
+    authorCampus: 'Rathinam',
+    title: 'Monotonic Stack Invariant: Next Greater Element boundary condition',
+    subject: 'Data Structures & Algorithms',
+    topic: 'Stacks & Queues',
+    body: 'When maintaining a monotonic decreasing stack to compute the next greater element in O(n) time, do we pop elements that are strictly smaller than current, or smaller than or equal to current? Does storing indices versus values change edge-case handling for duplicates?',
+    timestamp: '2 hours ago',
+    acceptedAnswerId: undefined,
+    isLocked: false,
+    answers: [
+      {
+        id: 'ans_03_helper_a',
+        authorId: 'std_maya_sharma',
+        authorName: 'Maya Sharma',
+        authorCampus: 'HI-Tech',
+        body: 'You should pop strictly smaller elements if you want the first element strictly greater: `while stack and nums[stack[-1]] < nums[i]: pop()`. If you need "greater or equal", use `<=`. Storing indices is strictly superior because it allows you to calculate spans and index distances directly without hash lookups.',
+        timestamp: '1 hour ago',
+        isAccepted: false,
+        xpAwarded: false,
+      },
+      {
+        id: 'ans_03_helper_b',
+        authorId: 'std_arjun_patel',
+        authorName: 'Arjun Patel',
+        authorCampus: 'HI-Tech',
+        body: 'Always push indices onto the stack instead of values! That way duplicate values at different positions are treated as distinct index entities. Also, traversing backwards from n-1 to 0 often makes the monotonic invariant cleaner for Next Greater Element on the right.',
+        timestamp: '45 mins ago',
+        isAccepted: false,
+        xpAwarded: false,
       },
     ],
   },
@@ -1866,7 +1981,7 @@ function solveRecurrence(arr, target) {
     id: 'asgn_03',
     title: 'Python Advanced Metaclasses, Iterators & C3 MRO',
     subject: 'Python Programming',
-    campus: 'Ratnam',
+    campus: 'Rathinam',
     section: 'CS-B',
     dueDate: '2026-10-23',
     dueTime: '18:00',
@@ -1893,7 +2008,7 @@ export const INITIAL_ASSIGNMENT_SUBMISSIONS: AssignmentSubmission[] = [
     assignmentId: 'asgn_01',
     studentId: 'std_rahul_verma',
     studentName: 'Rahul Verma',
-    campus: 'Ratnam',
+    campus: 'Rathinam',
     section: 'CS-B',
     submittedAt: '2026-10-14T19:22:10Z',
     status: 'submitted',

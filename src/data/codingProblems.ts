@@ -31,6 +31,7 @@ export interface CodingProblem {
   starterCode: Record<SupportedLanguage, string>;
   functionName: string;
   testCases: TestCase[];
+  hints?: string[];
   sourceUrl?: string;
 }
 

@@ -11,7 +11,7 @@ interface DailyQuizModalProps {
 }
 
 export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose }) => {
-  const { questions, syllabusList, claimDailyQuizReward } = useApp();
+  const { questions, syllabusList, claimDailyQuizReward, isDark } = useApp();
 
   const [selectedSubject, setSelectedSubject] = useState<'dsa' | 'python'>('dsa');
   const [activeQuestions, setActiveQuestions] = useState<Question[]>([]);
@@ -70,7 +70,6 @@ export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose 
     const timer = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev <= 1) {
-          // Time expired for this question
           handleSelectOption(-1);
           return 0;
         }
@@ -100,11 +99,12 @@ export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose 
     setSelectedOption(index);
     setIsAnswered(true);
 
-    const isCorrect = index === currentQ.correctOptionIndex;
-    if (isCorrect) setScore((prev) => prev + 1);
+    if (index === currentQ.correctOptionIndex) {
+      setScore((prev) => prev + 1);
+    }
   };
 
-  const handleNext = () => {
+  const handleNextQuestion = () => {
     if (currentIndex + 1 < activeQuestions.length) {
       setCurrentIndex((prev) => prev + 1);
       setSelectedOption(null);
@@ -116,25 +116,23 @@ export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose 
       setShowHinglish(false);
       setRapidFireWarning(null);
     } else {
-      // Quiz Finished! Check anti-gaming and claim XP
-      const rapidCheck = checkRapidFireQuiz(timePerQuestion);
-      if (rapidCheck.isSuspicious) {
-        setRapidFireWarning(rapidCheck.reason || 'Flagged for rapid automated answering.');
-      }
-
-      const finalScore = selectedOption === currentQ?.correctOptionIndex ? score : score;
-      const res = claimDailyQuizReward(finalScore, activeQuestions.length, timePerQuestion, selectedSubject);
-      setRewardResult(res);
-      setIsCompleted(true);
+      finishQuiz();
     }
   };
 
-  const handleAskStudyBuddy = async () => {
-    if (!currentQ || selectedOption === null || loadingHint) return;
+  const finishQuiz = () => {
+    setIsCompleted(true);
+    const res = claimDailyQuizReward(score, activeQuestions.length, timePerQuestion, selectedSubject);
+    setRewardResult(res);
+  };
+
+  const handleFetchHint = async () => {
+    if (!currentQ || studyBuddyHint || loadingHint) return;
     setLoadingHint(true);
-    const userPicked = selectedOption === -1 ? 'Time Expired' : currentQ.options[selectedOption];
-    const correct = currentQ.options[currentQ.correctOptionIndex];
-    const hint = await getStudyBuddyHint(currentQ.questionText, userPicked, correct, selectedSubject, currentQ.topic);
+    const selOpt = selectedOption !== null && selectedOption >= 0 ? currentQ.options[selectedOption] : currentQ.options[0];
+    const correctOpt = currentQ.options[currentQ.correctOptionIndex];
+    const subjectName = selectedSubject === 'dsa' ? 'Data Structures & Algorithms' : 'Python Programming';
+    const hint = await getStudyBuddyHint(currentQ.questionText, selOpt, correctOpt, subjectName, currentQ.topic);
     setStudyBuddyHint(hint);
     setLoadingHint(false);
   };
@@ -143,30 +141,40 @@ export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose 
     if (!currentQ) return;
     if (!hinglishText && !loadingHinglish) {
       setLoadingHinglish(true);
-      const res = await getHinglishExplanation(currentQ.explanation, currentQ.questionText, currentQ.topic);
-      setHinglishText(res);
+      const text = await getHinglishExplanation(currentQ.explanation, currentQ.questionText, currentQ.topic);
+      setHinglishText(text);
       setLoadingHinglish(false);
     }
     setShowHinglish(!showHinglish);
   };
 
+  const cardBg = isDark
+    ? 'bg-slate-900 border-slate-800 text-white'
+    : 'bg-white border-slate-200 text-slate-900 shadow-2xl';
+  const headerBg = isDark
+    ? 'border-slate-800 bg-slate-950/50'
+    : 'border-slate-200 bg-slate-50';
+  const subBoxBg = isDark
+    ? 'bg-slate-950 border-slate-800'
+    : 'bg-slate-50 border-slate-200';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className={`relative w-full max-w-2xl border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-colors ${cardBg}`}>
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+        <div className={`px-6 py-4 border-b flex items-center justify-between ${headerBg}`}>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-white">Daily Micro-Challenge</span>
-              <span className="text-slate-500">·</span>
-              <span className="text-xs text-slate-400">Current Syllabus Topics Only</span>
+              <span className="text-sm font-bold">Daily Micro-Challenge</span>
+              <span className="opacity-40">·</span>
+              <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Current Syllabus Topics Only</span>
             </div>
-            <div className="text-[11px] text-slate-400 mt-0.5">
+            <div className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               15 Base XP + 5 XP per correct answer · 1 official attempt per calendar day
             </div>
           </div>
 
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
+          <button onClick={onClose} className={`p-1 rounded-lg ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`}>
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -175,7 +183,7 @@ export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose 
         <div className="p-6 overflow-y-auto flex-1">
           {!isCompleted ? (
             activeQuestions.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 text-sm">
+              <div className={`text-center py-12 text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 No approved questions available for current syllabus topics. Please check back after faculty approval.
               </div>
             ) : (
@@ -186,7 +194,11 @@ export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose 
                     <button
                       onClick={() => setSelectedSubject('dsa')}
                       className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors ${
-                        selectedSubject === 'dsa' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'
+                        selectedSubject === 'dsa'
+                          ? 'bg-indigo-600 text-white font-semibold'
+                          : isDark
+                          ? 'bg-slate-800 text-slate-400'
+                          : 'bg-slate-100 text-slate-600'
                       }`}
                     >
                       DSA (CS-201)
@@ -194,7 +206,11 @@ export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose 
                     <button
                       onClick={() => setSelectedSubject('python')}
                       className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors ${
-                        selectedSubject === 'python' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'
+                        selectedSubject === 'python'
+                          ? 'bg-indigo-600 text-white font-semibold'
+                          : isDark
+                          ? 'bg-slate-800 text-slate-400'
+                          : 'bg-slate-100 text-slate-600'
                       }`}
                     >
                       Python (PY-102)
@@ -202,10 +218,10 @@ export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose 
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-slate-400 tabular-nums">
+                    <span className={`text-xs tabular-nums ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                       Question {currentIndex + 1} of {activeQuestions.length}
                     </span>
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-950 border border-slate-800 text-xs font-semibold tabular-nums text-amber-400">
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-semibold tabular-nums text-amber-500 ${subBoxBg}`}>
                       <Clock className="w-3.5 h-3.5" />
                       <span>{timeRemaining}s</span>
                     </div>
@@ -213,29 +229,33 @@ export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose 
                 </div>
 
                 {/* Question Topic & Difficulty */}
-                <div className="flex items-center gap-2 text-xs text-slate-400 mb-2">
-                  <span className="text-indigo-400 font-medium">{currentQ.topic}</span>
+                <div className={`flex items-center gap-2 text-xs mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  <span className="text-indigo-500 font-medium">{currentQ.topic}</span>
                   <span>·</span>
                   <span className="capitalize">{currentQ.difficulty}</span>
                 </div>
 
                 {/* Question Text */}
-                <h4 className="text-base sm:text-lg font-semibold text-white mb-6 leading-snug">
+                <h4 className="text-base sm:text-lg font-semibold mb-6 leading-snug">
                   {currentQ.questionText}
                 </h4>
 
                 {/* Options */}
                 <div className="space-y-3 mb-6">
                   {currentQ.options.map((opt, idx) => {
-                    let btnStyle = 'bg-slate-950 border-slate-800 text-slate-200 hover:border-slate-700 hover:bg-slate-800/40';
+                    let btnStyle = isDark
+                      ? 'bg-slate-950 border-slate-800 text-slate-200 hover:border-slate-700 hover:bg-slate-800/40'
+                      : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-slate-300 hover:bg-slate-100';
 
                     if (isAnswered) {
                       if (idx === currentQ.correctOptionIndex) {
-                        btnStyle = 'bg-emerald-500/10 border-emerald-500 text-emerald-300 font-medium';
+                        btnStyle = 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-300 font-medium';
                       } else if (idx === selectedOption) {
-                        btnStyle = 'bg-rose-500/10 border-rose-500 text-rose-300';
+                        btnStyle = 'bg-rose-500/10 border-rose-500 text-rose-600 dark:text-rose-300';
                       } else {
-                        btnStyle = 'bg-slate-950/40 border-slate-900 text-slate-500 opacity-60';
+                        btnStyle = isDark
+                          ? 'bg-slate-950/40 border-slate-900 text-slate-500 opacity-60'
+                          : 'bg-slate-100/60 border-slate-200 text-slate-400 opacity-60';
                       }
                     }
 
@@ -247,140 +267,137 @@ export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose 
                         className={`w-full text-left p-3.5 rounded-xl border transition-all text-xs sm:text-sm flex items-center justify-between ${btnStyle}`}
                       >
                         <div className="flex items-center gap-3">
-                          <span className="w-6 h-6 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-xs font-bold shrink-0">
+                          <span className={`w-6 h-6 rounded-lg border flex items-center justify-center text-xs font-bold shrink-0 ${
+                            isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-300'
+                          }`}>
                             {String.fromCharCode(65 + idx)}
                           </span>
                           <span>{opt}</span>
                         </div>
 
                         {isAnswered && idx === currentQ.correctOptionIndex && (
-                          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 ml-2" />
+                          <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0 ml-2" />
                         )}
                         {isAnswered && idx === selectedOption && idx !== currentQ.correctOptionIndex && (
-                          <XCircle className="w-4 h-4 text-rose-400 shrink-0 ml-2" />
+                          <XCircle className="w-5 h-5 text-rose-500 shrink-0 ml-2" />
                         )}
                       </button>
                     );
                   })}
                 </div>
 
-                {/* Rapid fire anti-gaming alert */}
                 {rapidFireWarning && (
-                  <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2">
+                  <div className="p-3 mb-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 shrink-0" />
                     <span>{rapidFireWarning}</span>
                   </div>
                 )}
 
-                {/* Post-Answer Feedback & AI Tools */}
+                {/* Explanation & AI Tools */}
                 {isAnswered && (
-                  <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                        <HelpCircle className="w-4 h-4 text-indigo-400" />
-                        <span>Explanation</span>
+                  <div className="space-y-3 mb-6 animate-in fade-in duration-200">
+                    <div className={`p-4 rounded-xl border text-xs leading-relaxed ${subBoxBg}`}>
+                      <div className="font-bold mb-1">
+                        Explanation:
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        {/* Hinglish toggle */}
-                        <button
-                          onClick={handleToggleHinglish}
-                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition-colors"
-                        >
-                          <Languages className="w-3.5 h-3.5 text-amber-400" />
-                          <span>{showHinglish ? 'Show English' : 'Hinglish Explanations'}</span>
-                        </button>
-
-                        {/* AI Study Buddy for incorrect answers */}
-                        {selectedOption !== currentQ.correctOptionIndex && (
-                          <button
-                            onClick={handleAskStudyBuddy}
-                            disabled={loadingHint || Boolean(studyBuddyHint)}
-                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-indigo-300 bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-800 rounded-lg transition-colors"
-                          >
-                            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                            <span>{loadingHint ? 'Consulting TA...' : studyBuddyHint ? 'TA Hint Loaded' : 'Ask AI Study Buddy'}</span>
-                          </button>
-                        )}
-                      </div>
+                      <p className={isDark ? 'text-slate-300' : 'text-slate-700'}>{currentQ.explanation}</p>
                     </div>
 
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      {showHinglish && hinglishText ? hinglishText : currentQ.explanation}
-                    </p>
-
-                    {/* AI Study Buddy Hint Banner */}
-                    {studyBuddyHint && (
-                      <div className="p-3 rounded-lg bg-indigo-950/40 border border-indigo-800/60 text-xs text-indigo-200 leading-relaxed">
-                        <span className="font-semibold text-white">AI Study Buddy (Pedagogical Insight): </span>
-                        {studyBuddyHint}
+                    {showHinglish && hinglishText && (
+                      <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-xs text-indigo-900 dark:text-indigo-200 leading-relaxed">
+                        <div className="font-bold flex items-center gap-1.5 mb-1 text-indigo-500">
+                          <Languages className="w-3.5 h-3.5" />
+                          <span>Hinglish Explanation (AI Study Buddy):</span>
+                        </div>
+                        <p>{hinglishText}</p>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Bottom Bar: AI Assistance & Next Button */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-700/20">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleFetchHint}
+                      disabled={loadingHint || Boolean(studyBuddyHint)}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                        isDark
+                          ? 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white'
+                          : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      <span>{loadingHint ? 'Thinking...' : studyBuddyHint ? 'Hint Received' : 'Study Buddy Hint'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleToggleHinglish}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                        isDark
+                          ? 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white'
+                          : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Languages className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>{loadingHinglish ? 'Translating...' : showHinglish ? 'Hide Hinglish' : 'Explain in Hinglish'}</span>
+                    </button>
+                  </div>
+
+                  {isAnswered && (
+                    <button
+                      onClick={handleNextQuestion}
+                      className="flex items-center justify-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors"
+                    >
+                      <span>{currentIndex + 1 < activeQuestions.length ? 'Next Question' : 'Complete Challenge'}</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                {studyBuddyHint && (
+                  <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-300">
+                    <strong>Study Buddy Hint: </strong>
+                    {studyBuddyHint}
                   </div>
                 )}
               </div>
             )
           ) : (
-            /* Quiz Completed View */
-            <div className="text-center py-8">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-4">
+            /* Results Screen */
+            <div className="text-center py-6 space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-500 flex items-center justify-center mx-auto mb-2">
                 <CheckCircle className="w-8 h-8" />
               </div>
 
-              <h4 className="text-xl font-bold text-white mb-1">Micro-Challenge Completed!</h4>
-              <p className="text-slate-400 text-xs mb-6">
-                You completed today's official syllabus challenge.
+              <h4 className="text-xl font-bold">Challenge Completed!</h4>
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                You scored <strong className={isDark ? 'text-white' : 'text-slate-900'}>{score}</strong> out of {activeQuestions.length} on today's syllabus topics.
               </p>
 
-              {/* Scorecard */}
-              <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto mb-6">
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <div className="text-xs text-slate-400 mb-1">Score Accuracy</div>
-                  <div className="text-2xl font-bold text-white tabular-nums">
-                    {score} / {activeQuestions.length}
+              {rewardResult && (
+                <div className={`p-4 rounded-xl border max-w-sm mx-auto space-y-1 ${subBoxBg}`}>
+                  <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>XP Awarded to Verifiable Ledger</div>
+                  <div className="text-3xl font-extrabold text-emerald-500 tabular-nums">
+                    +{rewardResult.xpEarned} XP
                   </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                  <div className="text-xs text-slate-400 mb-1">XP Earned</div>
-                  <div className="text-2xl font-bold text-emerald-400 tabular-nums">
-                    {rewardResult?.success ? `+${rewardResult.xpEarned} XP` : '0 XP'}
-                  </div>
-                </div>
-              </div>
-
-              {rewardResult?.reason && !rewardResult.success && (
-                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs max-w-md mx-auto mb-6">
-                  {rewardResult.reason}
+                  {rewardResult.reason && (
+                    <div className="text-[11px] text-amber-500 font-medium pt-1">
+                      {rewardResult.reason}
+                    </div>
+                  )}
                 </div>
               )}
 
-              <p className="text-xs text-slate-400 max-w-md mx-auto mb-6">
-                Rule: Daily quizzes are capped at 1 official XP-earning attempt per day to prevent binge cramming and promote daily habit consistency.
-              </p>
-
               <button
                 onClick={onClose}
-                className="py-2.5 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors"
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-xs"
               >
-                Close & Return to Dashboard
+                Return to Dashboard
               </button>
             </div>
           )}
         </div>
-
-        {/* Footer Actions */}
-        {!isCompleted && isAnswered && (
-          <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/60 flex justify-end">
-            <button
-              onClick={handleNext}
-              className="flex items-center gap-2 py-2 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-colors"
-            >
-              <span>{currentIndex + 1 < activeQuestions.length ? 'Next Question' : 'Complete Quiz & Award XP'}</span>
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

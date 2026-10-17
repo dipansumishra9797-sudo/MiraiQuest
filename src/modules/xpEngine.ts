@@ -1,5 +1,5 @@
 /**
- * LevelUp XP Rules Engine
+ * MiraiQuest XP Rules Engine
  * -------------------------------------------------------------
  * Event-driven, verifiable, anti-farming points economy.
  * Enforces the Three Core Principles:

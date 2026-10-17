@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import {
   AuditFlag,
   Badge,
   Campus,
+  AcademicYear,
+  GlobalFilterState,
   FacultyProfile,
   LedgerEntry,
   PeerHelpPost,
@@ -19,6 +21,7 @@ import {
   ThemeMode,
   Assignment,
   AssignmentSubmission,
+  AppNotification,
 } from '../types';
 import {
   CAMPUSES,
@@ -38,6 +41,7 @@ import {
   INITIAL_ASSIGNMENT_SUBMISSIONS,
 } from '../data/mockData';
 import { CODING_PROBLEMS, CodingProblem } from '../data/codingProblems';
+import { ALL_INITIAL_CODING_CATALOG, TopicProblemItem } from '../data/codingPracticeCatalog';
 import { calculateLevelFromXp, processXpEvent, XpEvent } from '../modules/xpEngine';
 import confetti from 'canvas-confetti';
 
@@ -66,8 +70,19 @@ interface AppContextType {
   assignments: Assignment[];
   assignmentSubmissions: AssignmentSubmission[];
   theme: ThemeMode;
+  effectiveTheme: 'light' | 'dark';
+  isDark: boolean;
   importedProblems: CodingProblem[];
-  allCodingProblems: CodingProblem[];
+  allCodingProblems: (CodingProblem | TopicProblemItem)[];
+  studentSolvedProblems: Record<string, string[]>;
+  unlockedTopicBatches: Record<string, number>;
+  
+  // Navigation & Drawer
+  isDrawerOpen: boolean;
+  setIsDrawerOpen: (open: boolean) => void;
+  toggleDrawer: () => void;
+  navSection: string;
+  setNavSection: (sec: string) => void;
   
   // Actions
   setTheme: (theme: ThemeMode) => void;
@@ -77,6 +92,9 @@ interface AppContextType {
   submitAssignment: (asgnId: string, studentId: string, codeOrText: string, fileName?: string) => { success: boolean; pointsAwarded: number; message: string };
   gradeAssignmentSubmission: (subId: string, grade: number, feedback: string, facultyName: string) => void;
   importCodingProblem: (problem: CodingProblem) => void;
+  addCodingProblem: (problem: CodingProblem) => void;
+  solveCodingProblem: (studentId: string, problemId: string) => { success: boolean; pointsAwarded: number; message: string; nextProblemId?: string };
+  generateAiTopicQuestions: (topicId: string, count?: number) => Promise<{ success: boolean; count: number; message: string }>;
   triggerXpEvent: (event: XpEvent) => { success: boolean; pointsAwarded: number; reason: string; rejectedReason?: string };
   updateRule: (ruleId: string, updates: Partial<XpRule>, adminName: string) => void;
   toggleRuleActive: (ruleId: string, adminName: string) => void;
@@ -85,7 +103,7 @@ interface AppContextType {
   toggleOptOutOfLeaderboards: (studentId: string) => void;
   claimDailyQuizReward: (score: number, total: number, timeSpentArr: number[], subjectId: string) => { success: boolean; xpEarned: number; reason?: string };
   answerPeerDoubt: (postId: string, answerText: string) => void;
-  acceptPeerAnswer: (postId: string, answerId: string) => void;
+  acceptPeerAnswer: (postId: string, answerId: string) => Promise<{ success: boolean; message: string; xpAwarded?: number }>;
   addPeerPost: (title: string, body: string, subject: string, topic: string) => void;
   approveQuestion: (questionId: string, facultyName: string) => void;
   rejectQuestion: (questionId: string, facultyName: string) => void;
@@ -100,15 +118,169 @@ interface AppContextType {
   sendFacultyNudge: (studentId: string) => void;
   resetAllData: () => void;
   
-  // UI Level-Up Celebration
-  levelUpModal: { show: boolean; oldLevel: number; newLevel: number; studentName: string } | null;
-  closeLevelUpModal: () => void;
+  // Rank Progression Celebration
+  rankProgressModal: { show: boolean; oldLevel: number; newLevel: number; studentName: string } | null;
+  closeRankProgressModal: () => void;
   triggerConfetti: () => void;
+
+  // Notifications
+  notifications: AppNotification[];
+  addNotification: (notif: AppNotification) => void;
+  markNotificationAsRead: (id: string) => void;
+
+  // User Profile Modal
+  isProfileModalOpen: boolean;
+  profileModalUserId: string | null;
+  profileModalRole: 'student' | 'faculty' | 'admin';
+  profileActiveTab: 'profile' | 'batchmates' | 'social' | 'account' | 'privacy' | 'appearance';
+  setProfileActiveTab: (tab: 'profile' | 'batchmates' | 'social' | 'account' | 'privacy' | 'appearance') => void;
+  openProfileModal: (
+    userId?: string,
+    roleOverride?: 'student' | 'faculty' | 'admin',
+    initialTab?: 'profile' | 'batchmates' | 'social' | 'account' | 'privacy' | 'appearance'
+  ) => void;
+  closeProfileModal: () => void;
+  updateStudentProfile: (studentId: string, updates: Partial<StudentProfile>) => Promise<{ success: boolean; error?: string }>;
+  requestPhoneOtp: (studentId: string, newPhoneNumber: string) => Promise<{ success: boolean; message: string; mockOtp?: string }>;
+  verifyPhoneOtp: (studentId: string, newPhoneNumber: string, otp: string) => Promise<{ success: boolean; error?: string }>;
+  updateFacultyProfile: (facultyId: string, updates: Partial<FacultyProfile>) => Promise<{ success: boolean; error?: string }>;
+
+  // Global Filters (Teacher & Admin)
+  globalFilters: GlobalFilterState;
+  setGlobalFilters: React.Dispatch<React.SetStateAction<GlobalFilterState>>;
+  updateGlobalFilter: <K extends keyof GlobalFilterState>(key: K, value: GlobalFilterState[K]) => void;
+  toggleCampusFilter: (campus: Campus) => void;
+  toggleYearFilter: (year: AcademicYear) => void;
+  toggleSectionFilter: (section: string) => void;
+  clearGlobalFilters: () => void;
+  filteredStudents: StudentProfile[];
+  availableSections: string[];
 }
 
 const AppContext = createContext<AppContextType | null>(null);
 
-const STORAGE_KEY = 'msot_levelup_storage_v1';
+const STORAGE_KEY = 'msot_miraiquest_storage_v2';
+const FILTERS_STORAGE_KEY = 'miraiquest_global_filters_v2';
+
+export const DEFAULT_GLOBAL_FILTERS: GlobalFilterState = {
+  campuses: [],
+  years: [],
+  sections: [],
+  subject: 'all',
+  searchQuery: '',
+  sortBy: 'xp',
+};
+
+const parseFiltersFromUrl = (): Partial<GlobalFilterState> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const result: Partial<GlobalFilterState> = {};
+
+    const campusParam = params.get('campus') || params.get('campuses');
+    if (campusParam) {
+      const validCampuses = campusParam
+        .split(',')
+        .map((c) => c.trim())
+        .filter((c) => ['HI-Tech', 'Rathinam', 'JUJ'].includes(c)) as Campus[];
+      if (validCampuses.length > 0) result.campuses = validCampuses;
+    }
+
+    const yearParam = params.get('year') || params.get('years');
+    if (yearParam) {
+      const validYears = yearParam
+        .split(',')
+        .map((y) => y.trim())
+        .filter((y) =>
+          ['1st Year', '2nd Year', '3rd Year', '4th Year'].includes(y)
+        ) as AcademicYear[];
+      if (validYears.length > 0) result.years = validYears;
+    }
+
+    const sectionParam = params.get('section') || params.get('sections');
+    if (sectionParam) {
+      result.sections = sectionParam
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+
+    const subjectParam = params.get('subject');
+    if (subjectParam) {
+      result.subject = subjectParam.trim();
+    }
+
+    const searchParam = params.get('search');
+    if (searchParam) {
+      result.searchQuery = searchParam.trim();
+    }
+
+    const sortParam = params.get('sort') || params.get('sortBy');
+    if (sortParam && ['name', 'xp', 'streak', 'activity'].includes(sortParam)) {
+      result.sortBy = sortParam as any;
+    }
+
+    return result;
+  } catch (e) {
+    return {};
+  }
+};
+
+const syncFiltersToUrl = (filters: GlobalFilterState) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const params = new URLSearchParams(window.location.search);
+
+    if (filters.campuses.length > 0) {
+      params.set('campus', filters.campuses.join(','));
+    } else {
+      params.delete('campus');
+      params.delete('campuses');
+    }
+
+    if (filters.years.length > 0) {
+      params.set('year', filters.years.join(','));
+    } else {
+      params.delete('year');
+      params.delete('years');
+    }
+
+    if (filters.sections.length > 0) {
+      params.set('section', filters.sections.join(','));
+    } else {
+      params.delete('section');
+      params.delete('sections');
+    }
+
+    if (filters.subject && filters.subject !== 'all') {
+      params.set('subject', filters.subject);
+    } else {
+      params.delete('subject');
+    }
+
+    if (filters.searchQuery.trim()) {
+      params.set('search', filters.searchQuery.trim());
+    } else {
+      params.delete('search');
+    }
+
+    if (filters.sortBy && filters.sortBy !== 'xp') {
+      params.set('sort', filters.sortBy);
+    } else {
+      params.delete('sort');
+      params.delete('sortBy');
+    }
+
+    const newQuery = params.toString();
+    const newUrl = newQuery
+      ? `${window.location.pathname}?${newQuery}`
+      : window.location.pathname;
+    window.history.replaceState({}, '', newUrl);
+  } catch (e) {
+    console.warn('Could not sync filters to URL:', e);
+  }
+};
+
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Load state or defaults
@@ -129,7 +301,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeFacultyId, setActiveFacultyId] = useState<string>(initial?.activeFacultyId || 'fac_priya_nair');
 
   const [students, setStudents] = useState<StudentProfile[]>(initial?.students || INITIAL_STUDENTS);
-  const [facultyList] = useState<FacultyProfile[]>(INITIAL_FACULTY);
+  const [facultyList, setFacultyList] = useState<FacultyProfile[]>(INITIAL_FACULTY);
   const [rules, setRules] = useState<XpRule[]>(initial?.rules || INITIAL_RULES);
   const [ruleAuditLogs, setRuleAuditLogs] = useState<RuleAuditLog[]>(initial?.ruleAuditLogs || []);
   const [ledger, setLedger] = useState<LedgerEntry[]>(initial?.ledger || INITIAL_LEDGER);
@@ -151,37 +323,231 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [importedProblems, setImportedProblems] = useState<CodingProblem[]>(
     initial?.importedProblems || []
   );
+
+  // Student solved problems mapping
+  const [studentSolvedProblems, setStudentSolvedProblems] = useState<Record<string, string[]>>(() => {
+    if (initial?.studentSolvedProblems) return initial.studentSolvedProblems;
+    return {
+      std_rahul_verma: ['mq_arrays_1', 'mq_arrays_3'],
+      std_maya_sharma: ['mq_arrays_1', 'mq_arrays_2', 'mq_arrays_3', 'mq_strings_1', 'mq_hashing_1'],
+      std_arjun_patel: ['mq_arrays_1'],
+      std_sneha_kulkarni: ['mq_arrays_1', 'mq_strings_2'],
+    };
+  });
+
+  // Track unlocked batches per topic (batch 1 default, batch 2 unlocked after mastery)
+  const [unlockedTopicBatches, setUnlockedTopicBatches] = useState<Record<string, number>>(
+    initial?.unlockedTopicBatches || { arrays: 1, strings: 1, hashing: 1 }
+  );
+
+  // Navigation & Drawer
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [navSection, setNavSection] = useState<string>(initial?.navSection || 'dashboard:overview');
+
+  const toggleDrawer = () => setIsDrawerOpen((prev) => !prev);
+
+  // Theme mode: light and dark only (default: light)
   const [theme, setTheme] = useState<ThemeMode>(() => {
     try {
-      const stored = localStorage.getItem('msot_levelup_theme') as ThemeMode;
+      const stored = localStorage.getItem('msot_miraiquest_theme');
       if (stored === 'light' || stored === 'dark') return stored;
     } catch {}
-    return initial?.theme || 'dark';
+    return (initial?.theme === 'light' || initial?.theme === 'dark') ? initial.theme : 'light';
   });
+
+  const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>('light');
+
+  useEffect(() => {
+    const resolved: 'light' | 'dark' = theme === 'dark' ? 'dark' : 'light';
+    setEffectiveTheme(resolved);
+
+    const root = document.documentElement;
+    if (resolved === 'dark') {
+      root.classList.add('dark');
+      root.classList.remove('light');
+      root.style.colorScheme = 'dark';
+    } else {
+      root.classList.remove('dark');
+      root.classList.add('light');
+      root.style.colorScheme = 'light';
+    }
+
+    try {
+      localStorage.setItem('msot_miraiquest_theme', resolved);
+    } catch (e) {
+      console.warn('Theme storage error:', e);
+    }
+  }, [theme]);
+
+  const isDark = effectiveTheme === 'dark';
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
-  useEffect(() => {
+  // Profile Modal State
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileModalUserId, setProfileModalUserId] = useState<string | null>(null);
+  const [profileModalRole, setProfileModalRole] = useState<'student' | 'faculty' | 'admin'>('student');
+  const [profileActiveTab, setProfileActiveTab] = useState<'profile' | 'batchmates' | 'social' | 'account' | 'privacy' | 'appearance'>('profile');
+
+  // Notifications State
+  const [notifications, setNotifications] = useState<AppNotification[]>([
+    {
+      id: 'notif_welcome',
+      userId: 'stud_rahul',
+      title: 'Welcome to MiraiQuest',
+      message: 'Explore your daily quests, challenges, and peer help board!',
+      type: 'streak',
+      timestamp: new Date().toISOString(),
+      read: false,
+    },
+  ]);
+
+  const [rankProgressModal, setRankProgressModal] = useState<{
+    show: boolean;
+    oldLevel: number;
+    newLevel: number;
+    studentName: string;
+  } | null>(null);
+
+  // Global Filters State (Teacher & Admin)
+  const [globalFilters, setGlobalFilters] = useState<GlobalFilterState>(() => {
+    const urlFilters = parseFiltersFromUrl();
+    if (Object.keys(urlFilters).length > 0) {
+      return { ...DEFAULT_GLOBAL_FILTERS, ...urlFilters };
+    }
     try {
-      localStorage.setItem('msot_levelup_theme', theme);
-      const root = document.documentElement;
-      if (theme === 'dark') {
-        root.classList.add('dark');
-        root.classList.remove('light');
-        root.style.colorScheme = 'dark';
-      } else {
-        root.classList.remove('dark');
-        root.classList.add('light');
-        root.style.colorScheme = 'light';
+      const saved = localStorage.getItem(FILTERS_STORAGE_KEY);
+      if (saved) {
+        return { ...DEFAULT_GLOBAL_FILTERS, ...JSON.parse(saved) };
       }
     } catch (e) {
-      console.warn('Failed to update theme classes:', e);
+      // fallback
     }
-  }, [theme]);
+    return DEFAULT_GLOBAL_FILTERS;
+  });
 
-  const [levelUpModal, setLevelUpModal] = useState<{ show: boolean; oldLevel: number; newLevel: number; studentName: string } | null>(null);
+  // Sync Global Filters to LocalStorage and URL query params
+  useEffect(() => {
+    try {
+      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(globalFilters));
+    } catch (e) {
+      console.warn('Could not save global filters:', e);
+    }
+    syncFiltersToUrl(globalFilters);
+  }, [globalFilters]);
+
+  const updateGlobalFilter = <K extends keyof GlobalFilterState>(
+    key: K,
+    value: GlobalFilterState[K]
+  ) => {
+    setGlobalFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const toggleCampusFilter = (campus: Campus) => {
+    setGlobalFilters((prev) => {
+      const exists = prev.campuses.includes(campus);
+      return {
+        ...prev,
+        campuses: exists
+          ? prev.campuses.filter((c) => c !== campus)
+          : [...prev.campuses, campus],
+      };
+    });
+  };
+
+  const toggleYearFilter = (year: AcademicYear) => {
+    setGlobalFilters((prev) => {
+      const exists = prev.years.includes(year);
+      return {
+        ...prev,
+        years: exists
+          ? prev.years.filter((y) => y !== year)
+          : [...prev.years, year],
+      };
+    });
+  };
+
+  const toggleSectionFilter = (section: string) => {
+    setGlobalFilters((prev) => {
+      const exists = prev.sections.includes(section);
+      return {
+        ...prev,
+        sections: exists
+          ? prev.sections.filter((s) => s !== section)
+          : [...prev.sections, section],
+      };
+    });
+  };
+
+  const clearGlobalFilters = () => {
+    setGlobalFilters(DEFAULT_GLOBAL_FILTERS);
+  };
+
+  // Available sections dynamically computed based on selected campus and year
+  const availableSections = useMemo(() => {
+    const relevant = students.filter((s) => {
+      if (
+        globalFilters.campuses.length > 0 &&
+        !globalFilters.campuses.includes(s.campus)
+      )
+        return false;
+      if (
+        globalFilters.years.length > 0 &&
+        !globalFilters.years.includes(s.year)
+      )
+        return false;
+      return true;
+    });
+    return Array.from(new Set(relevant.map((s) => s.section))).sort();
+  }, [students, globalFilters.campuses, globalFilters.years]);
+
+  // Students filtered by active global filters (campus, year, section, search, sort)
+  const filteredStudents = useMemo(() => {
+    return students
+      .filter((s) => {
+        if (
+          globalFilters.campuses.length > 0 &&
+          !globalFilters.campuses.includes(s.campus)
+        ) {
+          return false;
+        }
+        if (
+          globalFilters.years.length > 0 &&
+          !globalFilters.years.includes(s.year)
+        ) {
+          return false;
+        }
+        if (
+          globalFilters.sections.length > 0 &&
+          !globalFilters.sections.includes(s.section)
+        ) {
+          return false;
+        }
+        if (globalFilters.searchQuery.trim()) {
+          const q = globalFilters.searchQuery.toLowerCase();
+          const matchName = s.name.toLowerCase().includes(q);
+          const matchRoll = s.rollNumber.toLowerCase().includes(q);
+          const matchEmail = s.email.toLowerCase().includes(q);
+          if (!matchName && !matchRoll && !matchEmail) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (globalFilters.sortBy === 'name') {
+          return a.name.localeCompare(b.name);
+        }
+        if (globalFilters.sortBy === 'streak') {
+          return b.streakDays - a.streakDays;
+        }
+        if (globalFilters.sortBy === 'activity') {
+          return b.lastActiveDate.localeCompare(a.lastActiveDate);
+        }
+        return b.totalXp - a.totalXp;
+      });
+  }, [students, globalFilters]);
+
 
   // Sync to local storage
   useEffect(() => {
@@ -208,7 +574,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           assignments,
           assignmentSubmissions,
           importedProblems,
+          studentSolvedProblems,
+          unlockedTopicBatches,
           theme,
+          navSection,
         })
       );
     } catch (e) {
@@ -234,7 +603,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     assignments,
     assignmentSubmissions,
     importedProblems,
+    studentSolvedProblems,
+    unlockedTopicBatches,
     theme,
+    navSection,
   ]);
 
   const activeStudent = students.find((s) => s.id === activeStudentId) || students[0];
@@ -249,7 +621,213 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const closeLevelUpModal = () => setLevelUpModal(null);
+  const closeRankProgressModal = () => setRankProgressModal(null);
+
+  // Combined coding problems list
+  const allCodingProblems = [
+    ...ALL_INITIAL_CODING_CATALOG,
+    ...CODING_PROBLEMS.filter(
+      (cp) => !ALL_INITIAL_CODING_CATALOG.some((catalogP) => catalogP.id === cp.id)
+    ),
+    ...importedProblems,
+  ];
+
+  // Solve Coding Problem with instant XP, anti-gaming checks, and dynamic unlocked recommendations
+  const solveCodingProblem = (studentId: string, problemId: string) => {
+    const student = students.find((s) => s.id === studentId);
+    if (!student) return { success: false, pointsAwarded: 0, message: 'Student not found.' };
+
+    const solvedList = studentSolvedProblems[studentId] || [];
+    if (solvedList.includes(problemId)) {
+      return {
+        success: false,
+        pointsAwarded: 0,
+        message: 'Problem has already been solved and verified. XP can only be earned once per problem.',
+      };
+    }
+
+    // Daily Cap Check: maximum 10 verified problems per day
+    const today = new Date().toISOString().split('T')[0];
+    const todaySolvesCount = ledger.filter(
+      (entry) =>
+        entry.studentId === studentId &&
+        entry.actionKey === 'solve_coding' &&
+        entry.date === today &&
+        entry.status === 'valid'
+    ).length;
+
+    if (todaySolvesCount >= 10) {
+      return {
+        success: false,
+        pointsAwarded: 0,
+        message: 'Daily coding cap reached (10 verified problems/day). Come back tomorrow to earn more XP!',
+      };
+    }
+
+    const problem = allCodingProblems.find((p) => p.id === problemId);
+    const difficulty = problem?.difficulty || 'medium';
+    const xpReward = difficulty === 'easy' ? 10 : difficulty === 'medium' ? 20 : 40;
+
+    // Trigger XP Event
+    const res = triggerXpEvent({
+      eventId: `ev_solve_code_${problemId}_${Date.now()}`,
+      studentId,
+      actionKey: 'solve_coding',
+      timestamp: new Date().toISOString(),
+      metadata: {
+        problemId,
+        problemTitle: problem?.title || 'Algorithmic Problem',
+        difficulty,
+        verificationSource: 'MiraiQuest Automated Sandboxed Unit-Test Verifier',
+      },
+    });
+
+    if (!res.success) {
+      return {
+        success: false,
+        pointsAwarded: 0,
+        message: res.rejectedReason || 'Verification check failed.',
+      };
+    }
+
+    // Update solved list
+    const updatedSolved = [...solvedList, problemId];
+    setStudentSolvedProblems((prev) => ({
+      ...prev,
+      [studentId]: updatedSolved,
+    }));
+
+    // Update student's verified count
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === studentId
+          ? {
+              ...s,
+              codingHandles: {
+                ...s.codingHandles,
+                verifiedProblemsCount: updatedSolved.length,
+              },
+            }
+          : s
+      )
+    );
+
+    triggerConfetti();
+
+    // Check topic progression & find next recommended question in this topic
+    const topicId = (problem as any)?.topicId || 'arrays';
+    const topicProblems = allCodingProblems.filter((p: any) => p.topicId === topicId);
+    const solvedInTopic = topicProblems.filter((p) => updatedSolved.includes(p.id));
+    const nextUnsolved = topicProblems.find((p) => !updatedSolved.includes(p.id));
+
+    // If student finished most of this topic (>= 60%), unlock harder batch
+    if (topicProblems.length > 0 && solvedInTopic.length / topicProblems.length >= 0.6) {
+      const currentBatch = unlockedTopicBatches[topicId] || 1;
+      if (currentBatch < 2) {
+        setUnlockedTopicBatches((prev) => ({
+          ...prev,
+          [topicId]: 2,
+        }));
+      }
+    }
+
+    return {
+      success: true,
+      pointsAwarded: res.pointsAwarded || xpReward,
+      message: `Unit tests verified! Earned +${res.pointsAwarded || xpReward} XP for "${problem?.title}".`,
+      nextProblemId: nextUnsolved?.id,
+    };
+  };
+
+  const addCodingProblem = (problem: CodingProblem) => {
+    setImportedProblems((prev) => [problem, ...prev]);
+  };
+
+  // Generate 10 AI Questions for a topic and put in Teacher Approval Queue
+  const generateAiTopicQuestions = async (topicId: string, count: number = 10) => {
+    try {
+      const sampleTitles = [
+        `Optimal ${topicId.toUpperCase()} Range Queries`,
+        `Bi-directional ${topicId.toUpperCase()} Search`,
+        `Monotonic ${topicId.toUpperCase()} Transformation`,
+        `Partitioning Boundary for ${topicId.toUpperCase()}`,
+        `Cyclic Invariants in ${topicId.toUpperCase()}`,
+        `Amortized ${topicId.toUpperCase()} Window`,
+        `Dynamic ${topicId.toUpperCase()} Memoization`,
+        `Fast-Slow Pointer on ${topicId.toUpperCase()}`,
+        `Multi-Threaded ${topicId.toUpperCase()} Queue`,
+        `Matrix Coordinates in ${topicId.toUpperCase()}`,
+      ];
+
+      const newProblems: TopicProblemItem[] = sampleTitles.slice(0, count).map((title, idx) => ({
+        id: `mq_ai_${topicId}_${Date.now()}_${idx}`,
+        title,
+        platform: 'leetcode',
+        platformProblemNumber: `AI-${idx + 1}`,
+        difficulty: idx % 3 === 0 ? 'easy' : idx % 3 === 1 ? 'medium' : 'hard',
+        xpReward: idx % 3 === 0 ? 10 : idx % 3 === 1 ? 20 : 40,
+        category: topicId,
+        tags: [topicId, 'AI-Generated', 'Pending Faculty Review'],
+        description: `Collegiate-level algorithmic challenge targeting deep mastery of ${topicId}. Implement an optimal in-place solution with bounded memory usage.`,
+        constraints: ['1 <= n <= 10^5', 'Runtime constraint: O(n log n) or better'],
+        examples: [{ input: 'data = [1, 2, 3]', output: 'true', explanation: 'Satisfies algorithmic condition.' }],
+        functionName: 'solve' + title.replace(/[^a-zA-Z]/g, ''),
+        starterCode: {
+          javascript: `function solve(input) {\n  // Implement solution\n  return true;\n}`,
+          python: `def solve(input):\n    return True`,
+          cpp: `// C++ implementation`,
+          java: `// Java implementation`,
+        },
+        testCases: [
+          {
+            id: `tc_${idx}_1`,
+            input: [[1, 2, 3]],
+            inputFormatted: '[1, 2, 3]',
+            expectedOutput: true,
+            expectedOutputFormatted: 'true',
+          },
+        ],
+        topicId,
+        topicName: topicId.toUpperCase(),
+        batch: 2,
+        hints: ['Pay close attention to edge cases.', 'Consider time vs space trade-offs.'],
+      }));
+
+      // Add as pending questions in the question bank for teacher approval
+      newProblems.forEach((p) => {
+        addQuestion({
+          subjectId: 'dsa',
+          topic: `Coding: ${topicId.toUpperCase()}`,
+          difficulty: p.difficulty,
+          questionText: `[Coding Challenge] ${p.title}: ${p.description}`,
+          options: [
+            'O(n) Time, O(1) Extra Space',
+            'O(n log n) Time, O(n) Space',
+            'O(n^2) Brute Force',
+            'O(2^n) Exponential Recursion',
+          ],
+          correctOptionIndex: 0,
+          explanation: 'Optimal algorithmic paradigm balances time and space efficiency.',
+          source: 'ai_generated',
+          status: 'pending_approval',
+          weekNumber: 4,
+        });
+        setImportedProblems((prev) => [p, ...prev]);
+      });
+
+      return {
+        success: true,
+        count: newProblems.length,
+        message: `Generated ${newProblems.length} new topic questions for ${topicId}! Sent to the Faculty Approval Queue for verification before releasing to students.`,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        count: 0,
+        message: err?.message || 'Failed to generate AI questions.',
+      };
+    }
+  };
 
   // Core XP Event Dispatcher
   const triggerXpEvent = (event: XpEvent) => {
@@ -275,7 +853,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Check if level increased
           if (newLevel > oldLevel) {
             triggerConfetti();
-            setLevelUpModal({
+            setRankProgressModal({
               show: true,
               oldLevel,
               newLevel,
@@ -399,36 +977,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       actionKey: 'daily_quiz',
       timestamp: now,
       metadata: {
-        quizScore: score,
-        quizTotal: total,
+        score,
+        totalQuestions: total,
         subjectId,
-        timeSpentArr,
+        timePerQuestionSeconds: timeSpentArr,
+        verificationSource: 'MiraiQuest In-App Quiz Engine',
       },
     };
 
     const res = triggerXpEvent(event);
     if (res.success) {
-      // Check for first quiz badge
-      if (!activeStudent.unlockedBadgeIds.includes('badge_first_quiz')) {
-        setStudents((prev) =>
-          prev.map((s) =>
-            s.id === activeStudentId
-              ? { ...s, unlockedBadgeIds: [...s.unlockedBadgeIds, 'badge_first_quiz'] }
-              : s
-          )
-        );
-        triggerConfetti();
-      }
+      triggerConfetti();
+      return { success: true, xpEarned: res.pointsAwarded };
     }
-    return { success: res.success, xpEarned: res.pointsAwarded, reason: res.rejectedReason };
+    return { success: false, xpEarned: 0, reason: res.rejectedReason };
   };
 
-  // Peer Help Board
   const addPeerPost = (title: string, body: string, subject: string, topic: string) => {
     const newPost: PeerHelpPost = {
       id: `post_${Date.now()}`,
-      studentId: activeStudentId,
-      authorName: activeStudent.name,
+      studentId: activeStudent.id,
+      authorName: activeStudent.isAnonymous ? activeStudent.anonymousNickname : activeStudent.name,
       authorCampus: activeStudent.campus,
       title,
       body,
@@ -446,7 +1015,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (p.id !== postId) return p;
         const newAns = {
           id: `ans_${Date.now()}`,
-          authorId: activeStudentId,
+          authorId: activeStudent.id,
           authorName: activeStudent.name,
           authorCampus: activeStudent.campus,
           body: answerText,
@@ -458,38 +1027,325 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const acceptPeerAnswer = (postId: string, answerId: string) => {
-    const post = peerPosts.find((p) => p.id === postId);
-    if (!post) return;
-    const answer = post.answers.find((a) => a.id === answerId);
-    if (!answer) return;
-
-    // Update post answer state
-    setPeerPosts((prev) =>
-      prev.map((p) => {
-        if (p.id !== postId) return p;
-        return {
-          ...p,
-          answers: p.answers.map((a) => (a.id === answerId ? { ...a, isAccepted: true } : a)),
-        };
-      })
-    );
-
-    // Trigger verifiable peer help XP to answer author (15 XP)
-    triggerXpEvent({
-      eventId: `ev_peer_${Date.now()}`,
-      studentId: answer.authorId,
-      actionKey: 'peer_help',
-      timestamp: new Date().toISOString(),
-      metadata: {
-        helperId: answer.authorId,
-        askerId: post.studentId,
-        doubtTitle: post.title,
-      },
-    });
+  const addNotification = (notif: AppNotification) => {
+    setNotifications((prev) => [notif, ...prev]);
   };
 
-  // Question Bank & Faculty Approval Queue
+  const markNotificationAsRead = (id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+  };
+
+  const openProfileModal = (
+    userId?: string,
+    roleOverride?: 'student' | 'faculty' | 'admin',
+    initialTab?: 'profile' | 'batchmates' | 'social' | 'account' | 'privacy' | 'appearance'
+  ) => {
+    const targetRole = roleOverride || role;
+    setProfileModalRole(targetRole);
+    if (userId) {
+      setProfileModalUserId(userId);
+    } else {
+      if (targetRole === 'student') setProfileModalUserId(activeStudentId);
+      else if (targetRole === 'faculty') setProfileModalUserId(activeFaculty.id);
+      else setProfileModalUserId('admin_01');
+    }
+    setProfileActiveTab(initialTab || 'profile');
+    setIsProfileModalOpen(true);
+  };
+
+  const closeProfileModal = () => {
+    setIsProfileModalOpen(false);
+  };
+
+  const updateStudentProfile = async (
+    studentId: string,
+    updates: Partial<StudentProfile>
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch(`/api/students/${studentId}/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to update profile' };
+      }
+      setStudents((prev) =>
+        prev.map((s) => (s.id === studentId ? { ...s, ...updates } : s))
+      );
+      return { success: true };
+    } catch {
+      // Local fallback
+      setStudents((prev) =>
+        prev.map((s) => (s.id === studentId ? { ...s, ...updates } : s))
+      );
+      return { success: true };
+    }
+  };
+
+  const requestPhoneOtp = async (studentId: string, newPhoneNumber: string) => {
+    try {
+      const res = await fetch(`/api/students/${studentId}/request-phone-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPhoneNumber }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'OTP request failed');
+      return { success: true, message: data.message, mockOtp: data.mockOtp };
+    } catch (e: any) {
+      return { success: false, message: e.message || 'OTP request failed' };
+    }
+  };
+
+  const verifyPhoneOtp = async (studentId: string, newPhoneNumber: string, otp: string) => {
+    try {
+      const res = await fetch(`/api/students/${studentId}/verify-phone-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPhoneNumber, otp }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Invalid OTP code' };
+      }
+      setStudents((prev) =>
+        prev.map((s) => (s.id === studentId ? { ...s, phoneNumber: newPhoneNumber } : s))
+      );
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Verification error' };
+    }
+  };
+
+  const updateFacultyProfile = async (
+    facultyId: string,
+    updates: Partial<FacultyProfile>
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch(`/api/faculty/${facultyId}/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to update faculty profile' };
+      }
+      setFacultyList((prev) =>
+        prev.map((f) => (f.id === facultyId ? { ...f, ...updates } : f))
+      );
+      return { success: true };
+    } catch {
+      setFacultyList((prev) =>
+        prev.map((f) => (f.id === facultyId ? { ...f, ...updates } : f))
+      );
+      return { success: true };
+    }
+  };
+
+  const acceptPeerAnswer = async (
+    postId: string,
+    answerId: string
+  ): Promise<{ success: boolean; message: string; xpAwarded?: number }> => {
+    const post = peerPosts.find((p) => p.id === postId);
+    if (!post) return { success: false, message: 'Doubt post not found.' };
+
+    const answer = post.answers.find((a) => a.id === answerId);
+    if (!answer) return { success: false, message: 'Answer not found.' };
+
+    if (post.isLocked) {
+      return { success: false, message: 'Choice is locked. XP has already been awarded.' };
+    }
+
+    const callerId = role === 'student' ? activeStudentId : activeFaculty.id;
+    const isOwner = callerId === post.studentId;
+    const isFaculty = role === 'faculty' || role === 'admin';
+
+    if (!isOwner && !isFaculty) {
+      return { success: false, message: 'Permission denied: Only the student who asked this doubt (or faculty) can accept an answer.' };
+    }
+
+    if (answer.authorId === post.studentId) {
+      return { success: false, message: 'Invalid action: Asker cannot accept their own answer, and no self-help XP is allowed.' };
+    }
+
+    try {
+      const response = await fetch('/api/peer-doubts/accept-answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          doubtId: postId,
+          answerId,
+          doubtOwnerId: post.studentId,
+          answerAuthorId: answer.authorId,
+          answerAuthorName: answer.authorName,
+          callerId,
+          callerRole: role,
+          doubtTitle: post.title,
+          isAlreadyLocked: post.isLocked || false,
+          helperTodayAcceptedCount: 0,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        return { success: false, message: data.error || 'Failed to accept answer.' };
+      }
+
+      // Reorder answers so accepted answer is on top!
+      setPeerPosts((prev) =>
+        prev.map((p) => {
+          if (p.id !== postId) return p;
+          const updatedAnswers = p.answers.map((a) => ({
+            ...a,
+            isAccepted: a.id === answerId,
+            xpAwarded: a.id === answerId ? data.pointsAwarded > 0 : false,
+          }));
+          // Sort accepted answer to top
+          updatedAnswers.sort((a, b) => (b.isAccepted ? 1 : 0) - (a.isAccepted ? 1 : 0));
+          return {
+            ...p,
+            acceptedAnswerId: answerId,
+            isLocked: true,
+            answers: updatedAnswers,
+          };
+        })
+      );
+
+      // Award XP to helper if pointsAwarded > 0
+      if (data.pointsAwarded > 0) {
+        const ledgerId = `led_${Date.now()}_peer`;
+        const newLedgerEntry: LedgerEntry = {
+          id: ledgerId,
+          studentId: answer.authorId,
+          timestamp: new Date().toISOString(),
+          date: new Date().toISOString().split('T')[0],
+          actionType: 'peer_help',
+          actionKey: 'peer_help',
+          sourceDescription: `Peer Help: "${post.title}"`,
+          points: data.pointsAwarded,
+          status: 'valid',
+          verificationMetadata: {
+            doubtId: post.id,
+            doubtTitle: post.title,
+            doubtLink: `/peer-help#post_${post.id}`,
+            askerId: post.studentId,
+            answerId,
+          },
+        };
+
+        setLedger((prev) => [newLedgerEntry, ...prev]);
+
+        // Update student XP, level, and increment acceptedAnswerCount
+        setStudents((prev) =>
+          prev.map((s) => {
+            if (s.id !== answer.authorId) return s;
+            const newTotalXp = s.totalXp + data.pointsAwarded;
+            const { level } = calculateLevelFromXp(newTotalXp);
+            return {
+              ...s,
+              totalXp: newTotalXp,
+              level,
+              acceptedAnswerCount: (s.acceptedAnswerCount || 0) + 1,
+            };
+          })
+        );
+      } else {
+        // Still increment acceptedAnswerCount for recognition
+        setStudents((prev) =>
+          prev.map((s) => {
+            if (s.id !== answer.authorId) return s;
+            return {
+              ...s,
+              acceptedAnswerCount: (s.acceptedAnswerCount || 0) + 1,
+            };
+          })
+        );
+      }
+
+      // Add notification for helper
+      if (data.notification) {
+        addNotification(data.notification);
+      }
+
+      // If collusion flag generated, add to auditFlags
+      if (data.collusionFlag) {
+        setAuditFlags((prev) => [data.collusionFlag, ...prev]);
+      }
+
+      return {
+        success: true,
+        message: data.pointsAwarded > 0
+          ? `Answer accepted! +${data.pointsAwarded} XP awarded to ${answer.authorName}. Choice is locked.`
+          : `Answer accepted! Daily cap reached for ${answer.authorName} (no additional XP). Choice is locked.`,
+        xpAwarded: data.pointsAwarded,
+      };
+    } catch {
+      // Offline fallback
+      setPeerPosts((prev) =>
+        prev.map((p) => {
+          if (p.id !== postId) return p;
+          const updatedAnswers = p.answers.map((a) => ({
+            ...a,
+            isAccepted: a.id === answerId,
+            xpAwarded: a.id === answerId,
+          }));
+          updatedAnswers.sort((a, b) => (b.isAccepted ? 1 : 0) - (a.isAccepted ? 1 : 0));
+          return {
+            ...p,
+            acceptedAnswerId: answerId,
+            isLocked: true,
+            answers: updatedAnswers,
+          };
+        })
+      );
+
+      const newLedgerEntry: LedgerEntry = {
+        id: `led_${Date.now()}_peer`,
+        studentId: answer.authorId,
+        timestamp: new Date().toISOString(),
+        date: new Date().toISOString().split('T')[0],
+        actionType: 'peer_help',
+        actionKey: 'peer_help',
+        sourceDescription: `Peer Help: "${post.title}"`,
+        points: 15,
+        status: 'valid',
+        verificationMetadata: {
+          doubtId: post.id,
+          doubtTitle: post.title,
+          doubtLink: `/peer-help#post_${post.id}`,
+          askerId: post.studentId,
+          answerId,
+        },
+      };
+
+      setLedger((prev) => [newLedgerEntry, ...prev]);
+      setStudents((prev) =>
+        prev.map((s) => {
+          if (s.id !== answer.authorId) return s;
+          const newTotalXp = s.totalXp + 15;
+          const { level } = calculateLevelFromXp(newTotalXp);
+          return {
+            ...s,
+            totalXp: newTotalXp,
+            level,
+            acceptedAnswerCount: (s.acceptedAnswerCount || 0) + 1,
+          };
+        })
+      );
+
+      return {
+        success: true,
+        message: `Answer accepted! +15 XP awarded to ${answer.authorName}. Choice is locked.`,
+        xpAwarded: 15,
+      };
+    }
+  };
+
   const approveQuestion = (questionId: string, facultyName: string) => {
     setQuestions((prev) =>
       prev.map((q) =>
@@ -533,7 +1389,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // Rewards Store
   const redeemReward = (itemId: string) => {
     const item = rewardItems.find((i) => i.id === itemId);
     if (!item) return { success: false, message: 'Item not found' };
@@ -544,7 +1399,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'Item is out of stock' };
     }
 
-    // Deduct coins (notice: total XP & level are NEVER reduced!)
     setStudents((prev) =>
       prev.map((s) =>
         s.id === activeStudentId
@@ -553,7 +1407,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       )
     );
 
-    // Decrement stock
     setRewardItems((prev) =>
       prev.map((i) => (i.id === itemId ? { ...i, stock: i.stock - 1 } : i))
     );
@@ -571,10 +1424,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRedemptions([red, ...redemptions]);
     triggerConfetti();
 
-    return { success: true, message: `Redeemed ${item.title}! Voucher voucher code sent to ${activeStudent.email}` };
+    return { success: true, message: `Redeemed ${item.title}! Voucher code sent to ${activeStudent.email}` };
   };
 
-  // Anti-Gaming Audits
   const resolveAuditFlag = (flagId: string, action: 'void' | 'dismiss', reviewerName: string, note: string) => {
     const flag = auditFlags.find((f) => f.id === flagId);
     if (!flag) return;
@@ -598,7 +1450,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // League Promotion & Relegation Simulation (Week End)
   const simulateWeekEnd = () => {
     let promoted = 0;
     let relegated = 0;
@@ -612,12 +1463,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ];
 
     setStudents((prev) => {
-      // Group by league
       return prev.map((student) => {
         const currentTierIndex = tierOrder.indexOf(student.league);
         let nextTier = student.league;
 
-        // Top 20% promoted, bottom 10% relegated (if not bronze)
         if (student.leagueRank <= 3 && currentTierIndex < tierOrder.length - 1) {
           nextTier = tierOrder[currentTierIndex + 1];
           promoted++;
@@ -630,7 +1479,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...student,
           league: nextTier,
           previousWeeklyXp: student.weeklyXp,
-          weeklyXp: 0, // Weekly reset gives fresh chance to late-starters!
+          weeklyXp: 0,
           leagueRank: Math.floor(Math.random() * 10) + 1,
         };
       });
@@ -640,14 +1489,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { promotedCount: promoted, relegatedCount: relegated };
   };
 
-  // Simulate 300 Concurrent Submissions (Team Battle Queue)
   const simulateBatchSubmissions = (count: number = 300) => {
     const queue: { id: string; teamId: string; points: number }[] = [];
     const idempotencySet = new Set<string>();
     let duplicates = 0;
 
     for (let i = 0; i < count; i++) {
-      // Simulate 5% intentional duplicate resubmissions
       const isDup = i % 20 === 0;
       const key = isDup ? `idemp_dup_sim_${Math.floor(i / 20)}` : `idemp_unique_${i}_${Date.now()}`;
 
@@ -657,13 +1504,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         idempotencySet.add(key);
         queue.push({
           id: `sim_sub_${i}`,
-          teamId: ['team_hi_tech', 'team_rathinam', 'team_rgib', 'team_juj'][i % 4],
+          teamId: ['team_hi_tech', 'team_rathinam', 'team_juj'][i % 3],
           points: [10, 20, 40][i % 3],
         });
       }
     }
 
-    // Process queued points into team battle
     setBattles((prev) =>
       prev.map((b) => {
         if (b.status !== 'active') return b;
@@ -696,17 +1542,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       totalSubmitted: count,
       processed: queue.length,
       duplicatesRejected: duplicates,
-      p95LatencyMs: 42, // Simulated high-throughput redis queue latency
+      p95LatencyMs: 42,
     };
   };
 
-  // External Platform Coding Practice Sync (LeetCode / Codeforces / GitHub)
   const simulateExternalCodingSync = (platform: 'leetcode' | 'codeforces' | 'github') => {
     const handle = activeStudent.codingHandles[platform] || 'active_student';
     const problemsAdded = 2;
     const now = new Date().toISOString();
 
-    // Trigger 2 verified coding problems via XP Engine
     const res1 = triggerXpEvent({
       eventId: `ev_code_${Date.now()}_1`,
       studentId: activeStudentId,
@@ -780,8 +1624,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!target) return;
     alert(`Supportive nudge dispatched to ${target.name} (${target.email}): "Hey ${target.name}, Prof. ${activeFaculty.name} noticed you missed recent labs. Drop by office hours or start with a 3-minute quiz today to keep your streak going!"`);
   };
-
-  const allCodingProblems = [...CODING_PROBLEMS, ...importedProblems];
 
   const importCodingProblem = (problem: CodingProblem) => {
     setImportedProblems((prev) => {
@@ -907,6 +1749,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAssignments(INITIAL_ASSIGNMENTS);
     setAssignmentSubmissions(INITIAL_ASSIGNMENT_SUBMISSIONS);
     setImportedProblems([]);
+    setStudentSolvedProblems({
+      std_rahul_verma: ['mq_arrays_1', 'mq_arrays_3'],
+      std_maya_sharma: ['mq_arrays_1', 'mq_arrays_2', 'mq_arrays_3', 'mq_strings_1', 'mq_hashing_1'],
+      std_arjun_patel: ['mq_arrays_1'],
+      std_sneha_kulkarni: ['mq_arrays_1', 'mq_strings_2'],
+    });
+    setUnlockedTopicBatches({ arrays: 1, strings: 1, hashing: 1 });
   };
 
   return (
@@ -936,11 +1785,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         assignments,
         assignmentSubmissions,
         theme,
+        effectiveTheme,
+        isDark,
         setTheme,
         toggleTheme,
         importedProblems,
         allCodingProblems,
+        studentSolvedProblems,
+        unlockedTopicBatches,
+        isDrawerOpen,
+        setIsDrawerOpen,
+        toggleDrawer,
+        navSection,
+        setNavSection,
         importCodingProblem,
+        addCodingProblem,
+        solveCodingProblem,
+        generateAiTopicQuestions,
         createAssignment,
         deleteAssignment,
         submitAssignment,
@@ -967,9 +1828,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         useStreakFreeze,
         sendFacultyNudge,
         resetAllData,
-        levelUpModal,
-        closeLevelUpModal,
+        rankProgressModal,
+        closeRankProgressModal,
         triggerConfetti,
+        globalFilters,
+        setGlobalFilters,
+        updateGlobalFilter,
+        toggleCampusFilter,
+        toggleYearFilter,
+        toggleSectionFilter,
+        clearGlobalFilters,
+        filteredStudents,
+        availableSections,
+        notifications,
+        addNotification,
+        markNotificationAsRead,
+        isProfileModalOpen,
+        profileModalUserId,
+        profileModalRole,
+        profileActiveTab,
+        setProfileActiveTab,
+        openProfileModal,
+        closeProfileModal,
+        updateStudentProfile,
+        requestPhoneOtp,
+        verifyPhoneOtp,
+        updateFacultyProfile,
       }}
     >
       {children}

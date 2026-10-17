@@ -30,8 +30,8 @@ export const GoogleSearchCodingModal: React.FC<GoogleSearchCodingModalProps> = (
   onSelectProblem,
   allowAssign = false,
 }) => {
-  const { theme, importCodingProblem, createAssignment, activeFaculty } = useApp();
-  const isDark = theme === 'dark';
+  const { importCodingProblem, createAssignment, activeFaculty, isDark } = useApp();
+
 
   const [query, setQuery] = useState('');
   const [platform, setPlatform] = useState<'all' | Platform>('all');

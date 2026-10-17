@@ -697,11 +697,10 @@ function solve(input) {
                       isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
                     }`}
                   >
-                    <option value="All Campuses">All Campuses (HI-Tech, Ratnam, RGIB, JUJ)</option>
+                    <option value="All Campuses">All Campuses (HI-Tech, Rathinam, JUJ)</option>
                     <option value="HI-Tech">HI-Tech Main Campus</option>
-                    <option value="Ratnam">Ratnam Campus</option>
+                    <option value="Rathinam">Rathinam Campus</option>
                     <option value="JUJ">JUJ Campus</option>
-                    <option value="RGIB">RGIB Campus</option>
                   </select>
                 </div>
 

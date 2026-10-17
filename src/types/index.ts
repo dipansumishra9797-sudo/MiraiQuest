@@ -1,4 +1,15 @@
-export type Campus = 'HI-Tech' | 'Rathinam' | 'RGIB' | 'JUJ';
+export type Campus = 'HI-Tech' | 'Rathinam' | 'JUJ';
+export type AcademicYear = '1st Year' | '2nd Year' | '3rd Year' | '4th Year';
+
+export interface GlobalFilterState {
+  campuses: Campus[];
+  years: AcademicYear[];
+  sections: string[];
+  subject: string;
+  searchQuery: string;
+  sortBy: 'name' | 'xp' | 'streak' | 'activity';
+}
+
 
 export type UserRole = 'student' | 'faculty' | 'admin';
 
@@ -57,17 +68,34 @@ export interface LedgerEntry {
   verificationMetadata?: Record<string, any>;
 }
 
+export interface StudentSocialLinks {
+  linkedin?: string;
+  github?: string;
+  leetcode?: string;
+  portfolio?: string;
+}
+
 export interface StudentProfile {
   id: string;
   name: string;
+  nickname?: string;
+  bio?: string;
+  dateOfBirth?: string;
+  gender?: string;
   email: string;
+  phoneNumber?: string;
+  city?: string;
+  skills?: string[];
   rollNumber: string;
   campus: Campus;
+  year: AcademicYear;
   section: string; // e.g. "CS-A", "CS-B", "IT-A"
   avatar: string;
   anonymousNickname: string;
   isAnonymous: boolean;
   optOutOfLeaderboards: boolean;
+  shareSocialLinksWithBatchmates?: boolean;
+  acceptedAnswerCount?: number;
   
   // Progression
   totalXp: number;
@@ -90,7 +118,8 @@ export interface StudentProfile {
   unlockedBadgeIds: string[];
   completedQuestIds: string[];
 
-  // External practice handles
+  // External practice handles & Social links
+  socialLinks?: StudentSocialLinks;
   codingHandles: {
     leetcode?: string;
     codeforces?: string;
@@ -107,6 +136,10 @@ export interface FacultyProfile {
   department: string;
   assignedSections: string[];
   subjects: string[];
+  avatar?: string;
+  bio?: string;
+  phoneNumber?: string;
+  socialLinks?: StudentSocialLinks;
 }
 
 export interface Question {
@@ -254,6 +287,7 @@ export interface PeerHelpAnswer {
   body: string;
   timestamp: string;
   isAccepted: boolean;
+  xpAwarded?: boolean;
 }
 
 export interface PeerHelpPost {
@@ -266,7 +300,20 @@ export interface PeerHelpPost {
   subject: string;
   topic: string;
   timestamp: string;
+  acceptedAnswerId?: string;
+  isLocked?: boolean;
   answers: PeerHelpAnswer[];
+}
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'peer_accept' | 'streak' | 'assignment' | 'nudge';
+  timestamp: string;
+  read: boolean;
+  link?: string;
 }
 
 export interface RewardItem {
@@ -307,7 +354,7 @@ export interface AuditFlag {
   reviewNote?: string;
 }
 
-export type ThemeMode = 'dark' | 'light' | 'system';
+export type ThemeMode = 'light' | 'dark';
 
 export interface Assignment {
   id: string;

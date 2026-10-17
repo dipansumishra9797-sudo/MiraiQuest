@@ -10,6 +10,7 @@ export const LeaguesLeaderboard: React.FC = () => {
     toggleAnonymousMode,
     toggleOptOutOfLeaderboards,
     simulateWeekEnd,
+    isDark,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'league' | 'campus' | 'batch' | 'personal_best'>('league');
@@ -76,16 +77,27 @@ export const LeaguesLeaderboard: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  const cardBg = isDark
+    ? 'bg-slate-900 border-slate-800 text-white'
+    : 'bg-white border-slate-200 text-slate-900 shadow-xs';
+  const subCardBg = isDark
+    ? 'bg-slate-950 border-slate-800'
+    : 'bg-slate-50 border-slate-200';
+  const tableHeaderBg = isDark
+    ? 'bg-slate-950 text-slate-400 border-slate-800'
+    : 'bg-slate-100 text-slate-600 border-slate-200';
+  const tableBorder = isDark ? 'divide-slate-800/60' : 'divide-slate-200';
+
   return (
     <div className="space-y-6">
       {/* Privacy & Opt-Out Controls */}
-      <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors ${cardBg}`}>
         <div>
-          <div className="text-xs font-semibold text-white flex items-center gap-1.5">
-            <Shield className="w-4 h-4 text-emerald-400" />
+          <div className="text-xs font-semibold flex items-center gap-1.5">
+            <Shield className="w-4 h-4 text-emerald-500" />
             <span>Inclusive & Private By Design</span>
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">
+          <div className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             You control your visibility. Leveled leagues compare you only against peers of similar rank; leaderboards reset weekly.
           </div>
         </div>
@@ -96,8 +108,12 @@ export const LeaguesLeaderboard: React.FC = () => {
             onClick={() => toggleAnonymousMode(activeStudent.id)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
               activeStudent.isAnonymous
-                ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300'
-                : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white'
+                ? isDark
+                  ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300'
+                  : 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                : isDark
+                ? 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white'
+                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
             }`}
           >
             {activeStudent.isAnonymous ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -109,8 +125,12 @@ export const LeaguesLeaderboard: React.FC = () => {
             onClick={() => toggleOptOutOfLeaderboards(activeStudent.id)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
               activeStudent.optOutOfLeaderboards
-                ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
-                : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white'
+                ? isDark
+                  ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                  : 'bg-rose-50 border-rose-200 text-rose-700'
+                : isDark
+                ? 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white'
+                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
             }`}
           >
             <UserX className="w-3.5 h-3.5" />
@@ -120,7 +140,11 @@ export const LeaguesLeaderboard: React.FC = () => {
           {/* Export CSV */}
           <button
             onClick={handleExportCsv}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-medium text-slate-300 hover:text-white transition-colors"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+              isDark
+                ? 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white'
+                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+            }`}
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export</span>
@@ -129,7 +153,7 @@ export const LeaguesLeaderboard: React.FC = () => {
           {/* Simulate Week End */}
           <button
             onClick={handleSimulateWeekEnd}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors shadow-xs"
           >
             <Play className="w-3 h-3 fill-current" />
             <span>Simulate Week End</span>
@@ -138,21 +162,25 @@ export const LeaguesLeaderboard: React.FC = () => {
       </div>
 
       {simulationResult && (
-        <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-200 text-xs flex items-center justify-between">
+        <div className={`p-3.5 rounded-xl border text-xs flex items-center justify-between ${
+          isDark
+            ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-200'
+            : 'bg-indigo-50 border-indigo-200 text-indigo-900'
+        }`}>
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
+            <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
             <span>
               Week ended simulated! {simulationResult.promotedCount} students promoted, {simulationResult.relegatedCount} relegated. Weekly XP has cleanly reset for a fresh cycle!
             </span>
           </div>
-          <button onClick={() => setSimulationResult(null)} className="text-slate-400 hover:text-white text-xs">
+          <button onClick={() => setSimulationResult(null)} className={`text-xs ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`}>
             Dismiss
           </button>
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-3">
+      <div className={`flex flex-wrap items-center justify-between gap-4 border-b pb-3 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
         <div className="flex items-center gap-2">
           {[
             { id: 'league', label: 'Similar-Level Leagues' },
@@ -164,8 +192,12 @@ export const LeaguesLeaderboard: React.FC = () => {
               onClick={() => setActiveTab(tab.id as any)}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                 activeTab === tab.id
-                  ? 'bg-slate-800 text-white font-semibold'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                  ? isDark
+                    ? 'bg-slate-800 text-white font-semibold'
+                    : 'bg-indigo-600 text-white font-semibold shadow-xs'
+                  : isDark
+                  ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
               {tab.label}
@@ -182,8 +214,10 @@ export const LeaguesLeaderboard: React.FC = () => {
                 onClick={() => setSelectedLeague(tier)}
                 className={`px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
                   selectedLeague === tier
-                    ? 'bg-indigo-600 text-white font-semibold'
-                    : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                    ? 'bg-indigo-600 text-white font-semibold shadow-xs'
+                    : isDark
+                    ? 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                    : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
                 }`}
               >
                 {tier}
@@ -195,14 +229,16 @@ export const LeaguesLeaderboard: React.FC = () => {
         {/* Campus sub-selector for Campus tab */}
         {activeTab === 'campus' && (
           <div className="flex items-center gap-1">
-            {(['HI-Tech', 'Rathinam', 'RGIB', 'JUJ'] as Campus[]).map((camp) => (
+            {(['HI-Tech', 'Rathinam', 'JUJ'] as Campus[]).map((camp) => (
               <button
                 key={camp}
                 onClick={() => setSelectedCampus(camp)}
                 className={`px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
                   selectedCampus === camp
-                    ? 'bg-indigo-600 text-white font-semibold'
-                    : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                    ? 'bg-indigo-600 text-white font-semibold shadow-xs'
+                    : isDark
+                    ? 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                    : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
                 }`}
               >
                 {camp}
@@ -212,16 +248,20 @@ export const LeaguesLeaderboard: React.FC = () => {
         )}
       </div>
 
-      {/* Leaderboard Table */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
+      {/* Leaderboard Table Container */}
+      <div className={`rounded-xl border overflow-hidden transition-colors ${cardBg}`}>
         {/* Promotion/Relegation Zone Legend */}
         {activeTab === 'league' && (
-          <div className="px-4 py-2 bg-slate-950/60 border-b border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+          <div className={`px-4 py-2 border-b text-[11px] flex items-center justify-between ${
+            isDark
+              ? 'bg-slate-950/60 border-slate-800 text-slate-400'
+              : 'bg-slate-50 border-slate-200 text-slate-600'
+          }`}>
             <div className="flex items-center gap-4">
-              <span className="flex items-center gap-1 text-emerald-400">
+              <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
                 <ArrowUp className="w-3 h-3" /> Top 3 Promoted to Next League
               </span>
-              <span className="flex items-center gap-1 text-rose-400">
+              <span className="flex items-center gap-1 text-rose-600 dark:text-rose-400 font-medium">
                 <ArrowDown className="w-3 h-3" /> Bottom 3 Relegated
               </span>
             </div>
@@ -230,8 +270,12 @@ export const LeaguesLeaderboard: React.FC = () => {
         )}
 
         {activeTab === 'personal_best' && (
-          <div className="px-4 py-2 bg-slate-950/60 border-b border-slate-800 text-[11px] text-slate-400 flex items-center gap-2">
-            <TrendingUp className="w-3.5 h-3.5 text-indigo-400" />
+          <div className={`px-4 py-2 border-b text-[11px] flex items-center gap-2 ${
+            isDark
+              ? 'bg-slate-950/60 border-slate-800 text-slate-400'
+              : 'bg-slate-50 border-slate-200 text-slate-600'
+          }`}>
+            <TrendingUp className="w-3.5 h-3.5 text-indigo-500" />
             <span>
               Fairness Ranking: Compares every student against their OWN previous week. Even students starting behind can top this board!
             </span>
@@ -240,7 +284,7 @@ export const LeaguesLeaderboard: React.FC = () => {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-950 text-slate-400 font-medium">
+            <thead className={`font-medium border-b ${tableHeaderBg}`}>
               <tr>
                 <th className="py-3 px-4 w-16">Rank</th>
                 <th className="py-3 px-4">Student</th>
@@ -259,7 +303,7 @@ export const LeaguesLeaderboard: React.FC = () => {
                 )}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className={`divide-y ${tableBorder}`}>
               {(activeTab === 'league'
                 ? leagueStudents
                 : activeTab === 'campus'
@@ -274,16 +318,22 @@ export const LeaguesLeaderboard: React.FC = () => {
                 return (
                   <tr
                     key={std.id}
-                    className={`hover:bg-slate-800/30 transition-colors ${
-                      isCurrent ? 'bg-indigo-950/30 font-medium' : ''
+                    className={`transition-colors ${
+                      isCurrent
+                        ? isDark
+                          ? 'bg-indigo-950/40 font-medium'
+                          : 'bg-indigo-50/70 font-medium'
+                        : isDark
+                        ? 'hover:bg-slate-800/30'
+                        : 'hover:bg-slate-50'
                     }`}
                   >
                     {/* Rank */}
                     <td className="py-3 px-4 tabular-nums">
                       <div className="flex items-center gap-1.5">
-                        {isPromoted && <ArrowUp className="w-3 h-3 text-emerald-400 shrink-0" />}
-                        {isRelegated && <ArrowDown className="w-3 h-3 text-rose-400 shrink-0" />}
-                        <span className={`font-semibold ${idx < 3 ? 'text-amber-400' : 'text-slate-400'}`}>
+                        {isPromoted && <ArrowUp className="w-3 h-3 text-emerald-500 shrink-0" />}
+                        {isRelegated && <ArrowDown className="w-3 h-3 text-rose-500 shrink-0" />}
+                        <span className={`font-semibold ${idx < 3 ? 'text-amber-500' : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                           #{idx + 1}
                         </span>
                       </div>
@@ -292,17 +342,19 @@ export const LeaguesLeaderboard: React.FC = () => {
                     {/* Student */}
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-300">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                          isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-700'
+                        }`}>
                           {displayName.charAt(0)}
                         </div>
                         <div>
-                          <div className="text-white font-medium flex items-center gap-1.5">
+                          <div className="font-medium flex items-center gap-1.5">
                             <span>{displayName}</span>
                             {std.isAnonymous && (
-                              <span className="text-[10px] text-slate-500">(Anonymous)</span>
+                              <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>(Anonymous)</span>
                             )}
                             {isCurrent && (
-                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-bold">
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-500 font-bold">
                                 YOU
                               </span>
                             )}
@@ -312,24 +364,24 @@ export const LeaguesLeaderboard: React.FC = () => {
                     </td>
 
                     {/* Campus & Section */}
-                    <td className="py-3 px-4 text-slate-400">
+                    <td className={`py-3 px-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                       <span>{std.campus}</span>
-                      <span className="text-slate-600 mx-1">·</span>
+                      <span className="mx-1 opacity-50">·</span>
                       <span>{std.section}</span>
                     </td>
 
                     {activeTab === 'personal_best' ? (
                       <>
-                        <td className="py-3 px-4 text-right text-slate-400 tabular-nums">
+                        <td className={`py-3 px-4 text-right tabular-nums ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                           {std.previousWeeklyXp} XP
                         </td>
-                        <td className="py-3 px-4 text-right text-white font-semibold tabular-nums">
+                        <td className="py-3 px-4 text-right font-semibold tabular-nums">
                           {std.weeklyXp} XP
                         </td>
                         <td className="py-3 px-4 text-right tabular-nums">
                           <span
                             className={`font-bold ${
-                              std.improvementPercent >= 0 ? 'text-emerald-400' : 'text-slate-500'
+                              std.improvementPercent >= 0 ? 'text-emerald-500' : isDark ? 'text-slate-500' : 'text-slate-400'
                             }`}
                           >
                             {std.improvementPercent >= 0 ? `+${std.improvementPercent}%` : `${std.improvementPercent}%`}
@@ -338,10 +390,10 @@ export const LeaguesLeaderboard: React.FC = () => {
                       </>
                     ) : (
                       <>
-                        <td className="py-3 px-4 text-right text-slate-300 tabular-nums">
+                        <td className={`py-3 px-4 text-right tabular-nums ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                           {std.streakDays > 0 ? `${std.streakDays}d 🔥` : '—'}
                         </td>
-                        <td className="py-3 px-4 text-right text-emerald-400 font-bold tabular-nums">
+                        <td className="py-3 px-4 text-right text-emerald-600 dark:text-emerald-400 font-bold tabular-nums">
                           {std.weeklyXp} XP
                         </td>
                       </>
