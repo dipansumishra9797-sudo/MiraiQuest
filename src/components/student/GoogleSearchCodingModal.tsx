@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../store/appStore';
-import { searchCodingProblemViaGoogle } from '../../modules/geminiService';
-import { CodingProblem, Platform, Difficulty } from '../../data/codingProblems';
+import { searchCodingProblems, SearchProblemResult } from '../../modules/geminiService';
 import {
   Search,
   Globe,
@@ -14,157 +13,191 @@ import {
   Loader2,
   Flame,
   ArrowRight,
-  Zap,
+  RefreshCw,
+  ChevronRight,
+  LayoutGrid,
+  Tag,
+  Link,
 } from 'lucide-react';
 
 interface GoogleSearchCodingModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectProblem?: (problem: CodingProblem) => void;
   allowAssign?: boolean;
+}
+
+const DIFFICULTY_COLORS: Record<string, string> = {
+  easy: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
+  medium: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
+  hard: 'bg-rose-500/10 text-rose-400 border border-rose-500/20',
+};
+
+const PLATFORM_COLORS: Record<string, string> = {
+  leetcode: 'bg-amber-500/15 text-amber-400 border border-amber-500/20',
+  hackerrank: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20',
+  codeforces: 'bg-blue-500/15 text-blue-400 border border-blue-500/20',
+};
+
+function SkeletonRow({ isDark }: { isDark: boolean }) {
+  return (
+    <div
+      className={`p-4 rounded-xl border animate-pulse space-y-2 ${
+        isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <div className={`h-4 w-16 rounded ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+        <div className={`h-4 w-12 rounded ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+      </div>
+      <div className={`h-5 w-3/4 rounded ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+      <div className={`h-4 w-full rounded ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+    </div>
+  );
 }
 
 export const GoogleSearchCodingModal: React.FC<GoogleSearchCodingModalProps> = ({
   isOpen,
   onClose,
-  onSelectProblem,
   allowAssign = false,
 }) => {
-  const { importCodingProblem, createAssignment, activeFaculty, isDark } = useApp();
-
+  const { createAssignment, activeFaculty, isDark } = useApp();
 
   const [query, setQuery] = useState('');
-  const [platform, setPlatform] = useState<'all' | Platform>('all');
-  const [difficulty, setDifficulty] = useState<'all' | Difficulty>('all');
+  const [topic, setTopic] = useState('');
+  const [platform, setPlatform] = useState<'all' | 'leetcode' | 'hackerrank' | 'codeforces'>('all');
+  const [difficulty, setDifficulty] = useState<'all' | 'easy' | 'medium' | 'hard'>('all');
   const [loading, setLoading] = useState(false);
-  const [searchResult, setSearchResult] = useState<CodingProblem | null>(null);
-  const [searchQueries, setSearchQueries] = useState<string[]>([]);
-  const [sources, setSources] = useState<string[]>([]);
-  const [isGrounded, setIsGrounded] = useState(false);
+  const [problems, setProblems] = useState<SearchProblemResult[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
+
+  // Assign flow
+  const [assigningProblem, setAssigningProblem] = useState<SearchProblemResult | null>(null);
+  const [assignCampus, setAssignCampus] = useState('All Campuses');
+  const [assignYear, setAssignYear] = useState('All Years');
+  const [assignSection, setAssignSection] = useState('All Sections');
+  const [assignDueDate, setAssignDueDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [assignXp, setAssignXp] = useState(25);
   const [assignSuccess, setAssignSuccess] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const popularQueries = [
-    { label: 'Watermelon (Codeforces 4A)', q: 'Watermelon Codeforces 4A', platform: 'codeforces' as const },
-    { label: 'Valid Parentheses (LeetCode 20)', q: 'Valid Parentheses LeetCode 20', platform: 'leetcode' as const },
-    { label: 'Compare Triplets (HackerRank)', q: 'Compare the Triplets HackerRank', platform: 'hackerrank' as const },
-    { label: 'Domino Piling (Codeforces 50A)', q: 'Domino Piling Codeforces 50A', platform: 'codeforces' as const },
-    { label: 'Climbing Stairs (LeetCode 70)', q: 'Climbing Stairs LeetCode 70', platform: 'leetcode' as const },
-    { label: 'Coin Change (LeetCode 322)', q: 'Coin Change LeetCode 322', platform: 'leetcode' as const },
-    { label: 'Next Round (Codeforces 158A)', q: 'Next Round Codeforces 158A', platform: 'codeforces' as const },
-    { label: 'Left Rotation (HackerRank)', q: 'Left Rotation Arrays HackerRank', platform: 'hackerrank' as const },
+  const quickSearches = [
+    { label: 'Arrays', q: 'arrays', t: 'Arrays' },
+    { label: 'Strings', q: 'strings', t: 'Strings' },
+    { label: 'Graphs', q: 'graphs', t: 'Graphs' },
+    { label: 'Dynamic Programming', q: 'dp', t: 'DP' },
+    { label: 'Trees', q: 'trees', t: 'Trees' },
+    { label: 'Hashing', q: 'hashing', t: 'Hashing' },
   ];
 
-  const handleSearch = async (searchQueryText?: string, targetPlatform?: 'all' | Platform) => {
-    const q = searchQueryText !== undefined ? searchQueryText : query;
+  const handleSearch = async (
+    searchQuery?: string,
+    searchTopic?: string,
+    targetPlatform?: typeof platform,
+    targetDifficulty?: typeof difficulty,
+    page = 1,
+    append = false
+  ) => {
+    const q = searchQuery !== undefined ? searchQuery : query;
+    const t = searchTopic !== undefined ? searchTopic : topic;
     const p = targetPlatform !== undefined ? targetPlatform : platform;
+    const d = targetDifficulty !== undefined ? targetDifficulty : difficulty;
 
-    if (!q.trim()) return;
+    if (!q.trim() && !t.trim()) return;
 
     setLoading(true);
     setErrorMessage(null);
-    setSearchResult(null);
     setAssignSuccess(null);
+    setAssigningProblem(null);
 
-    try {
-      const res = await searchCodingProblemViaGoogle(q, p, difficulty);
-      if (res.success && res.problem) {
-        setSearchResult(res.problem);
-        setSearchQueries(res.searchQueries || []);
-        setSources(res.sources || []);
-        setIsGrounded(res.isGrounded);
-      } else {
-        setErrorMessage('Could not retrieve problem details. Please refine your query.');
-      }
-    } catch (e: any) {
-      setErrorMessage(e?.message || 'Search failed. Please try again.');
-    } finally {
-      setLoading(false);
+    console.log(`[Modal] Searching: query="${q}" topic="${t}" platform="${p}" difficulty="${d}" page=${page}`);
+
+    const result = await searchCodingProblems(q, t, p, d, page, 10);
+    setLoading(false);
+    setHasSearched(true);
+    setCurrentPage(page);
+
+    if (!result.success) {
+      setErrorMessage(result.error || 'Search failed. Please try again.');
+      if (!append) setProblems([]);
+      return;
     }
+
+    if (append) {
+      setProblems((prev) => [...prev, ...result.problems]);
+    } else {
+      setProblems(result.problems);
+    }
+    setTotalCount(result.totalCount);
+    setHasMore(result.hasMore);
   };
 
-  const handleImportAndPractice = () => {
-    if (!searchResult) return;
-    importCodingProblem(searchResult);
-    if (onSelectProblem) {
-      onSelectProblem(searchResult);
-    }
-    onClose();
+  const handleLoadMore = () => {
+    handleSearch(query, topic, platform, difficulty, currentPage + 1, true);
   };
 
-  const handleCreateAssignmentFromProblem = () => {
-    if (!searchResult) return;
-    importCodingProblem(searchResult);
-    const asgn = createAssignment({
-      title: `${searchResult.platform.toUpperCase()}: ${searchResult.title}`,
+  const handleAssign = () => {
+    if (!assigningProblem) return;
+    createAssignment({
+      title: `[${assigningProblem.platform.toUpperCase()}] ${assigningProblem.title}`,
       subject: 'Data Structures & Algorithms',
-      campus: 'All Campuses',
-      section: 'All Sections',
-      dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      campus: assignCampus as any,
+      section: assignSection,
+      dueDate: assignDueDate,
       dueTime: '23:59',
-      pointsXp: searchResult.xpReward || 25,
-      description: searchResult.description,
+      pointsXp: assignXp,
+      description: assigningProblem.descriptionSummary,
       instructions: [
-        `Solve the official ${searchResult.platform.toUpperCase()} problem "${searchResult.title}".`,
-        'Test your solution thoroughly against sample and edge test cases.',
-        'Submit passing code in the Inbuilt Compiler to claim verified XP.',
+        `Solve "${assigningProblem.title}" on ${assigningProblem.platform.toUpperCase()}.`,
+        'Test your solution against all sample and hidden test cases.',
+        'Submit your passing code in the Inbuilt Compiler Sandbox to earn verified XP.',
       ],
       type: 'coding',
-      platformLink: searchResult.sourceUrl || `https://${searchResult.platform}.com`,
-      problemId: searchResult.id,
-      starterCode: searchResult.starterCode?.javascript || '',
+      platformLink: assigningProblem.sourceUrl,
       language: 'javascript',
       createdByName: activeFaculty.name,
       status: 'published',
     });
 
-    setAssignSuccess(`Assignment "${asgn.title}" published for All Campuses & Sections!`);
-    setTimeout(() => {
-      onClose();
-    }, 1800);
+    setAssignSuccess(
+      `"${assigningProblem.title}" assigned to ${assignCampus} / ${assignYear} / ${assignSection}!`
+    );
+    setAssigningProblem(null);
+    setTimeout(() => setAssignSuccess(null), 4000);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
       <div
-        className={`w-full max-w-3xl max-h-[90vh] flex flex-col rounded-2xl border shadow-2xl overflow-hidden transition-colors ${
-          isDark
-            ? 'bg-slate-900 border-slate-800 text-slate-100'
-            : 'bg-white border-slate-200 text-slate-900 shadow-2xl'
+        className={`w-full max-w-3xl max-h-[92vh] flex flex-col rounded-2xl border shadow-2xl overflow-hidden transition-colors ${
+          isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-2xl'
         }`}
       >
-        {/* Header */}
+        {/* ─── Header ─── */}
         <div
           className={`p-5 border-b flex items-center justify-between shrink-0 ${
             isDark ? 'border-slate-800 bg-slate-950/50' : 'border-slate-200 bg-slate-50/70'
           }`}
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-emerald-400 p-0.5 flex items-center justify-center shadow-xs">
-              <div
-                className={`w-full h-full rounded-[10px] flex items-center justify-center ${
-                  isDark ? 'bg-slate-950' : 'bg-white'
-                }`}
-              >
-                <Search className="w-5 h-5 text-indigo-400" />
-              </div>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-emerald-400 flex items-center justify-center shadow-sm">
+              <Search className="w-5 h-5 text-white" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold">Google Search Live Question Fetcher</h3>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 flex items-center gap-1">
-                  <Globe className="w-3 h-3 text-emerald-400" />
-                  <span>LeetCode · HackerRank · Codeforces</span>
-                </span>
-              </div>
+              <h3 className="text-base font-bold">Search LeetCode / HackerRank</h3>
               <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                Fetch genuine competitive programming challenges, constraints, starter templates, and test cases via Google Search.
+                Fetch competitive programming problems — all results come from our secure backend.
               </p>
             </div>
           </div>
-
           <button
             onClick={onClose}
             className={`p-2 rounded-lg transition-colors ${
@@ -175,17 +208,16 @@ export const GoogleSearchCodingModal: React.FC<GoogleSearchCodingModalProps> = (
           </button>
         </div>
 
-        {/* Search Bar & Filters */}
+        {/* ─── Search Bar & Filters ─── */}
         <div
-          className={`p-5 border-b space-y-3 shrink-0 ${
-            isDark ? 'border-slate-800 bg-slate-900/60' : 'border-slate-200 bg-slate-50/30'
+          className={`p-4 border-b space-y-3 shrink-0 ${
+            isDark ? 'border-slate-800 bg-slate-900/40' : 'border-slate-200 bg-slate-50/30'
           }`}
         >
-          {/* Input & Search Button */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              handleSearch();
+              handleSearch(query, topic, platform, difficulty, 1, false);
             }}
             className="flex items-center gap-2"
           >
@@ -195,7 +227,7 @@ export const GoogleSearchCodingModal: React.FC<GoogleSearchCodingModalProps> = (
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search problem title or topic (e.g. 'Watermelon', 'Climbing Stairs', 'Bit++', 'Subarray Sum')..."
+                placeholder="Search by title or keyword (e.g. 'Two Sum', 'Knapsack', 'Island')…"
                 className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-xs font-medium border transition-colors outline-hidden ${
                   isDark
                     ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500 focus:border-indigo-500'
@@ -204,114 +236,123 @@ export const GoogleSearchCodingModal: React.FC<GoogleSearchCodingModalProps> = (
               />
             </div>
 
+            <select
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              className={`px-3 py-2.5 rounded-xl border text-xs font-medium ${
+                isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-700 shadow-xs'
+              }`}
+            >
+              <option value="">Any Topic</option>
+              {['Arrays', 'Strings', 'Graphs', 'DP', 'Trees', 'Hashing'].map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+
             <button
               type="submit"
-              disabled={loading || !query.trim()}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all shrink-0 cursor-pointer"
+              disabled={loading || (!query.trim() && !topic.trim())}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all shrink-0 cursor-pointer"
             >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Searching Google...</span>
-                </>
-              ) : (
-                <>
-                  <Globe className="w-4 h-4" />
-                  <span>Fetch Problem</span>
-                </>
-              )}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              <span>{loading ? 'Searching…' : 'Search'}</span>
             </button>
           </form>
 
-          {/* Platform & Difficulty Filter Chips */}
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          {/* Platform & Difficulty chips */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
             <div className="flex items-center gap-1.5">
-              <span className={`text-[11px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Platform:</span>
-              {[
-                { id: 'all', label: 'All' },
-                { id: 'leetcode', label: 'LeetCode' },
-                { id: 'hackerrank', label: 'HackerRank' },
-                { id: 'codeforces', label: 'Codeforces' },
-              ].map((p) => (
+              <span className={`font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Platform:</span>
+              {(['all', 'leetcode', 'hackerrank', 'codeforces'] as const).map((p) => (
                 <button
-                  key={p.id}
+                  key={p}
                   type="button"
                   onClick={() => {
-                    setPlatform(p.id as any);
-                    if (query.trim()) handleSearch(query, p.id as any);
+                    setPlatform(p);
+                    if (query.trim() || topic.trim()) handleSearch(query, topic, p, difficulty, 1, false);
                   }}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
-                    platform === p.id
+                    platform === p
                       ? 'bg-indigo-600 text-white'
                       : isDark
                       ? 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
                       : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200 shadow-2xs'
                   }`}
                 >
-                  {p.label}
+                  {p === 'all' ? 'Both' : p === 'leetcode' ? 'LeetCode' : p === 'hackerrank' ? 'HackerRank' : 'Codeforces'}
                 </button>
               ))}
             </div>
 
             <div className="flex items-center gap-1.5">
-              <span className={`text-[11px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Difficulty:</span>
-              {[
-                { id: 'all', label: 'All' },
-                { id: 'easy', label: 'Easy' },
-                { id: 'medium', label: 'Medium' },
-                { id: 'hard', label: 'Hard' },
-              ].map((d) => (
+              <span className={`font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Difficulty:</span>
+              {(['all', 'easy', 'medium', 'hard'] as const).map((d) => (
                 <button
-                  key={d.id}
+                  key={d}
                   type="button"
-                  onClick={() => setDifficulty(d.id as any)}
-                  className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors ${
-                    difficulty === d.id
-                      ? 'bg-slate-700 text-white font-semibold'
+                  onClick={() => {
+                    setDifficulty(d);
+                    if (query.trim() || topic.trim()) handleSearch(query, topic, platform, d, 1, false);
+                  }}
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-medium capitalize transition-colors ${
+                    difficulty === d
+                      ? 'bg-slate-700 text-white'
                       : isDark
                       ? 'text-slate-400 hover:text-slate-200'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  {d.label}
+                  {d === 'all' ? 'All' : d}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Quick Suggestions */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
-            <span className={`shrink-0 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Try:</span>
-            {popularQueries.map((item) => (
+          {/* Quick topic chips */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+            <span className={`text-[11px] shrink-0 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Quick:</span>
+            {quickSearches.map((qs) => (
               <button
-                key={item.label}
+                key={qs.label}
                 type="button"
                 onClick={() => {
-                  setQuery(item.q);
-                  setPlatform(item.platform);
-                  handleSearch(item.q, item.platform);
+                  setQuery(qs.q);
+                  setTopic(qs.t);
+                  handleSearch(qs.q, qs.t, platform, difficulty, 1, false);
                 }}
-                className={`shrink-0 px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
+                className={`shrink-0 px-2.5 py-1 rounded-lg border text-[11px] transition-colors cursor-pointer ${
                   isDark
                     ? 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
                     : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-2xs'
                 }`}
               >
-                {item.label}
+                {qs.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        {/* ─── Results Body ─── */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {/* Error */}
           {errorMessage && (
-            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{errorMessage}</span>
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="font-semibold mb-0.5">Search failed</div>
+                <div>{errorMessage}</div>
+              </div>
+              <button
+                onClick={() => handleSearch(query, topic, platform, difficulty, 1, false)}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[11px] font-semibold shrink-0"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Retry
+              </button>
             </div>
           )}
 
+          {/* Assign success */}
           {assignSuccess && (
             <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-400 text-xs flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -319,201 +360,295 @@ export const GoogleSearchCodingModal: React.FC<GoogleSearchCodingModalProps> = (
             </div>
           )}
 
-          {loading && (
+          {/* Loading skeletons */}
+          {loading && problems.length === 0 && (
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => <SkeletonRow key={i} isDark={isDark} />)}
+            </div>
+          )}
+
+          {/* Results header */}
+          {!loading && hasSearched && problems.length > 0 && (
+            <div className={`flex items-center justify-between text-xs pb-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              <div className="flex items-center gap-1.5">
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>
+                  Showing {problems.length} of {totalCount} result{totalCount !== 1 ? 's' : ''}
+                </span>
+              </div>
+              {totalCount > 0 && (
+                <span className="font-medium">
+                  {platform !== 'all' ? platform.toUpperCase() : 'All Platforms'} ·{' '}
+                  {difficulty !== 'all' ? difficulty : 'All Difficulties'}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Problem list */}
+          {problems.map((prob) => (
+            <ProblemRow
+              key={prob.id}
+              prob={prob}
+              isDark={isDark}
+              allowAssign={allowAssign}
+              onAssign={() => setAssigningProblem(prob)}
+            />
+          ))}
+
+          {/* Load more */}
+          {!loading && hasMore && (
+            <button
+              onClick={handleLoadMore}
+              disabled={loading}
+              className="w-full py-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer mt-1
+                border-indigo-500/30 text-indigo-400 hover:bg-indigo-600/10 hover:border-indigo-500/50"
+            >
+              <ChevronRight className="w-4 h-4" />
+              Load More Problems
+            </button>
+          )}
+          {loading && problems.length > 0 && (
+            <div className="text-center py-4">
+              <Loader2 className="w-5 h-5 animate-spin text-indigo-400 mx-auto" />
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!loading && hasSearched && problems.length === 0 && !errorMessage && (
             <div className="py-16 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-600/10 border border-indigo-500/30 flex items-center justify-center mx-auto text-indigo-400 animate-pulse">
-                <Globe className="w-6 h-6 animate-spin" />
-              </div>
-              <div className="text-sm font-semibold">Executing Google Search Grounding...</div>
-              <div className={`text-xs max-w-sm mx-auto ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                Querying official LeetCode, HackerRank, and Codeforces indices for problem statement, test cases, and starter templates.
+              <Search className={`w-10 h-10 mx-auto ${isDark ? 'text-slate-700' : 'text-slate-300'}`} />
+              <div className="text-sm font-semibold">No questions found</div>
+              <div className={`text-xs max-w-xs mx-auto ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                Try different keywords, a broader topic, or switch platform to "Both".
               </div>
             </div>
           )}
 
-          {!loading && searchResult && (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              {/* Grounding Source Info */}
-              <div
-                className={`p-3.5 rounded-xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
-                  isDark ? 'bg-slate-950 border-slate-800/80' : 'bg-slate-50 border-slate-200'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="font-semibold text-emerald-400">
-                    {isGrounded ? 'Google Search Grounded Result' : 'Verified Competitive Spec Fetched'}
-                  </span>
-                  <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    via {searchResult.platform.toUpperCase()}
-                  </span>
-                </div>
-
-                {searchResult.sourceUrl && (
-                  <a
-                    href={searchResult.sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium"
-                  >
-                    <span>View Official Source</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                )}
-              </div>
-
-              {/* Problem Card */}
-              <div
-                className={`p-5 rounded-2xl border space-y-4 ${
-                  isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200 shadow-xs'
-                }`}
-              >
-                {/* Title & Badges */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
-                          searchResult.platform === 'leetcode'
-                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                            : searchResult.platform === 'hackerrank'
-                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                            : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                        }`}
-                      >
-                        {searchResult.platform}
-                      </span>
-
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded capitalize ${
-                          searchResult.difficulty === 'easy'
-                            ? 'bg-emerald-500/10 text-emerald-400'
-                            : searchResult.difficulty === 'medium'
-                            ? 'bg-amber-500/10 text-amber-400'
-                            : 'bg-rose-500/10 text-rose-400'
-                        }`}
-                      >
-                        {searchResult.difficulty}
-                      </span>
-
-                      <span className="text-[11px] text-indigo-400 font-semibold flex items-center gap-1">
-                        <Flame className="w-3 h-3 text-orange-400" />
-                        <span>+{searchResult.xpReward || 20} XP</span>
-                      </span>
-                    </div>
-
-                    <h4 className="text-lg font-bold">
-                      {searchResult.platformProblemNumber && (
-                        <span className={`mr-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                          #{searchResult.platformProblemNumber}
-                        </span>
-                      )}
-                      {searchResult.title}
-                    </h4>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {searchResult.category && (
-                      <span
-                        className={`text-[11px] px-2.5 py-1 rounded-lg border font-medium ${
-                          isDark
-                            ? 'bg-slate-900 border-slate-800 text-slate-300'
-                            : 'bg-slate-100 border-slate-200 text-slate-700'
-                        }`}
-                      >
-                        {searchResult.category}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Description Preview */}
-                <div
-                  className={`p-3.5 rounded-xl text-xs leading-relaxed max-h-44 overflow-y-auto whitespace-pre-line font-sans ${
-                    isDark ? 'bg-slate-900/80 text-slate-300' : 'bg-slate-50 text-slate-700'
-                  }`}
-                >
-                  {searchResult.description}
-                </div>
-
-                {/* Constraints */}
-                {searchResult.constraints && searchResult.constraints.length > 0 && (
-                  <div>
-                    <div className={`text-[11px] font-bold uppercase mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      Constraints
-                    </div>
-                    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px]">
-                      {searchResult.constraints.map((c, idx) => (
-                        <li key={idx} className="flex items-center gap-1.5 font-mono">
-                          <span className="w-1 h-1 rounded-full bg-indigo-400" />
-                          <span>{c}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Examples */}
-                {searchResult.examples && searchResult.examples.length > 0 && (
-                  <div>
-                    <div className={`text-[11px] font-bold uppercase mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      Sample Test Cases ({searchResult.testCases?.length || 0} Test Suites Ready)
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      {searchResult.examples.slice(0, 2).map((ex, idx) => (
-                        <div
-                          key={idx}
-                          className={`p-2.5 rounded-lg border font-mono text-[11px] ${
-                            isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'
-                          }`}
-                        >
-                          <div><span className="text-slate-500">Input: </span>{ex.input}</div>
-                          <div><span className="text-emerald-500">Output: </span>{ex.output}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
-                {allowAssign && (
-                  <button
-                    onClick={handleCreateAssignmentFromProblem}
-                    className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
-                      isDark
-                        ? 'bg-slate-950 border-slate-800 text-slate-200 hover:text-white hover:bg-slate-800'
-                        : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-100 shadow-xs'
-                    }`}
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Assign as Faculty Coursework</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={handleImportAndPractice}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-bold shadow-lg shadow-indigo-600/25 transition-all cursor-pointer"
-                >
-                  <Code className="w-4 h-4" />
-                  <span>Import & Practice in Sandbox Compiler</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {!loading && !searchResult && !errorMessage && (
-            <div className="py-12 text-center space-y-2">
-              <Search className={`w-8 h-8 mx-auto ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
-              <div className="text-xs font-medium">Enter a competitive programming problem name or select a suggestion above.</div>
-              <div className={`text-[11px] max-w-sm mx-auto ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                Supports LeetCode question names/numbers, HackerRank algorithms challenges, and Codeforces round problem sets.
+          {/* Initial state */}
+          {!loading && !hasSearched && (
+            <div className="py-14 text-center space-y-2">
+              <Search className={`w-8 h-8 mx-auto ${isDark ? 'text-slate-700' : 'text-slate-300'}`} />
+              <div className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Enter a keyword or choose a quick topic above to search problems.
               </div>
             </div>
           )}
         </div>
+
+        {/* ─── Assign Modal Overlay ─── */}
+        {assigningProblem && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center p-6 bg-slate-950/60 backdrop-blur-sm rounded-2xl">
+            <div
+              className={`w-full max-w-md rounded-2xl border p-6 space-y-4 shadow-2xl ${
+                isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold">Assign as Coursework</h4>
+                <button
+                  onClick={() => setAssigningProblem(null)}
+                  className={`p-1.5 rounded-lg ${isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-100'}`}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className={`p-3 rounded-xl border text-xs ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
+                <div className={`text-[10px] font-bold uppercase mb-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Problem</div>
+                <div className="font-semibold">{assigningProblem.title}</div>
+                <div className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {assigningProblem.platform.toUpperCase()} · {assigningProblem.difficulty} · {assigningProblem.category}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold mb-1">Campus</label>
+                  <select
+                    value={assignCampus}
+                    onChange={(e) => setAssignCampus(e.target.value)}
+                    className={`w-full px-2.5 py-1.5 rounded-lg border text-xs ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-900'}`}
+                  >
+                    <option>All Campuses</option>
+                    <option>HI-Tech</option>
+                    <option>Rathinam</option>
+                    <option>JUJ</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold mb-1">Year</label>
+                  <select
+                    value={assignYear}
+                    onChange={(e) => setAssignYear(e.target.value)}
+                    className={`w-full px-2.5 py-1.5 rounded-lg border text-xs ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-900'}`}
+                  >
+                    <option>All Years</option>
+                    <option>1st Year</option>
+                    <option>2nd Year</option>
+                    <option>3rd Year</option>
+                    <option>4th Year</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold mb-1">Section</label>
+                  <select
+                    value={assignSection}
+                    onChange={(e) => setAssignSection(e.target.value)}
+                    className={`w-full px-2.5 py-1.5 rounded-lg border text-xs ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-900'}`}
+                  >
+                    <option>All Sections</option>
+                    <option>CS-A</option>
+                    <option>CS-B</option>
+                    <option>IT-A</option>
+                    <option>IT-B</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold mb-1">XP Reward</label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={100}
+                    value={assignXp}
+                    onChange={(e) => setAssignXp(Number(e.target.value))}
+                    className={`w-full px-2.5 py-1.5 rounded-lg border text-xs font-semibold ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-900'}`}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold mb-1">Due Date</label>
+                <input
+                  type="date"
+                  value={assignDueDate}
+                  onChange={(e) => setAssignDueDate(e.target.value)}
+                  className={`w-full px-2.5 py-1.5 rounded-lg border text-xs ${isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-900'}`}
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-1">
+                <button
+                  onClick={() => setAssigningProblem(null)}
+                  className={`px-4 py-2 rounded-xl text-xs font-medium ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAssign}
+                  className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  Publish Assignment
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── Individual Problem Row ───
+const ProblemRow: React.FC<{
+  prob: SearchProblemResult;
+  isDark: boolean;
+  allowAssign: boolean;
+  onAssign: () => void;
+}> = ({ prob, isDark, allowAssign, onAssign }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div
+      className={`rounded-xl border transition-all ${
+        isDark ? 'bg-slate-950 border-slate-800 hover:border-slate-700' : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
+      }`}
+    >
+      <div className="p-3.5 space-y-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap mb-1">
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${PLATFORM_COLORS[prob.platform] ?? ''}`}>
+                {prob.platform}
+              </span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${DIFFICULTY_COLORS[prob.difficulty] ?? ''}`}>
+                {prob.difficulty}
+              </span>
+              {prob.platformProblemNumber && (
+                <span className={`text-[10px] font-mono ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                  #{prob.platformProblemNumber}
+                </span>
+              )}
+              <span className="text-[11px] text-indigo-400 font-semibold flex items-center gap-1">
+                <Flame className="w-3 h-3 text-orange-400" />
+                +{prob.xpReward} XP
+              </span>
+            </div>
+
+            <div className="font-semibold text-sm">{prob.title}</div>
+            <div className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              {prob.category}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <a
+              href={prob.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open on platform"
+              className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-slate-400 hover:text-indigo-400 hover:bg-slate-800' : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-100'}`}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+            <button
+              onClick={() => setExpanded((x) => !x)}
+              className={`p-1.5 rounded-lg transition-colors text-[11px] font-medium ${isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
+              title={expanded ? 'Collapse' : 'See description'}
+            >
+              {expanded ? 'Less' : 'More'}
+            </button>
+            {allowAssign && (
+              <button
+                onClick={onAssign}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold transition-colors cursor-pointer"
+              >
+                <Sparkles className="w-3 h-3" />
+                Assign
+              </button>
+            )}
+          </div>
+        </div>
+
+        {expanded && (
+          <div className={`pt-1 space-y-2 text-xs animate-in fade-in duration-150`}>
+            <div className={`p-2.5 rounded-lg ${isDark ? 'bg-slate-900 text-slate-300' : 'bg-slate-50 text-slate-700'}`}>
+              {prob.descriptionSummary}
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Tag className="w-3 h-3 text-slate-400" />
+              {prob.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className={`text-[10px] px-2 py-0.5 rounded-md ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+            <a
+              href={prob.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 font-medium w-fit"
+            >
+              <Link className="w-3 h-3" />
+              View on {prob.platform.toUpperCase()}
+              <ArrowRight className="w-3 h-3" />
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

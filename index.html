@@ -12,10 +12,183 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+      /*
+       * ─── SPLASH SCREEN ──────────────────────────────────────────────────────────
+       * Pure CSS splash — rendered before any JS loads, preventing FOUC.
+       * Reads system color-scheme so the correct theme shows instantly.
+       * Dismissed by main.tsx calling window.__hideSplash() after mount.
+       */
+
+      /* Respect prefers-color-scheme for the splash background */
+      :root {
+        --splash-bg: #020617;      /* slate-950 – dark (default for body) */
+        --splash-text: #f8fafc;    /* slate-50 */
+        --splash-accent: #6366f1;  /* indigo-500 */
+        --splash-track: #1e293b;   /* slate-800 */
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          --splash-bg: #f8fafc;
+          --splash-text: #0f172a;
+          --splash-track: #e2e8f0;
+        }
+      }
+
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: var(--splash-bg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 32px;
+        font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+        /* Fade out triggered by JS — default opacity 1 */
+        opacity: 1;
+        transition: opacity 0.5s ease;
+      }
+
+      #splash.splash-hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /* ── Brand wordmark ── */
+      .splash-title {
+        display: flex;
+        align-items: baseline;
+        gap: 0;
+        overflow: hidden;
+      }
+
+      .splash-title span {
+        display: inline-block;
+        font-size: clamp(3rem, 10vw, 5rem);
+        font-weight: 800;
+        color: var(--splash-text);
+        letter-spacing: -0.03em;
+        line-height: 1;
+        opacity: 0;
+        transform: translateY(24px);
+        animation: letter-rise 0.6s ease forwards;
+      }
+
+      /* Stagger each letter */
+      .splash-title span:nth-child(1) { animation-delay: 0.05s; }
+      .splash-title span:nth-child(2) { animation-delay: 0.12s; }
+      .splash-title span:nth-child(3) { animation-delay: 0.19s; }
+      .splash-title span:nth-child(4) { animation-delay: 0.26s; }
+      .splash-title span:nth-child(5) { animation-delay: 0.33s; }
+
+      /* Accent dot / glow on the "i" */
+      .splash-title .accent {
+        color: var(--splash-accent);
+        text-shadow: 0 0 32px color-mix(in srgb, var(--splash-accent) 60%, transparent);
+      }
+
+      @keyframes letter-rise {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* ── Sub-label ── */
+      .splash-sub {
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--splash-accent);
+        opacity: 0;
+        animation: fade-in 0.5s ease 0.55s forwards;
+      }
+
+      @keyframes fade-in {
+        to { opacity: 1; }
+      }
+
+      /* ── Progress bar ── */
+      .splash-bar-wrap {
+        width: min(260px, 60vw);
+        height: 3px;
+        background: var(--splash-track);
+        border-radius: 99px;
+        overflow: hidden;
+        opacity: 0;
+        animation: fade-in 0.3s ease 0.5s forwards;
+      }
+
+      .splash-bar {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--splash-accent), #818cf8);
+        border-radius: 99px;
+        animation: fill-bar 1.9s cubic-bezier(0.4, 0, 0.2, 1) 0.55s forwards;
+      }
+
+      @keyframes fill-bar {
+        0%   { width: 0%; }
+        60%  { width: 70%; }
+        90%  { width: 90%; }
+        100% { width: 100%; }
+      }
+
+      /* ── Reduced-motion override ── */
+      @media (prefers-reduced-motion: reduce) {
+        .splash-title span {
+          opacity: 1;
+          transform: none;
+          animation: none;
+        }
+        .splash-sub,
+        .splash-bar-wrap {
+          opacity: 1;
+          animation: none;
+        }
+        .splash-bar {
+          animation: none;
+          width: 100%;
+        }
+        #splash {
+          transition: opacity 0.2s ease;
+        }
+      }
+
+      /* ── Prevent body content flash ── */
+      body {
+        font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+        background: var(--splash-bg);
+        color: var(--splash-text);
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+      }
+    </style>
   </head>
-  <body class="font-sans antialiased bg-slate-950 text-slate-100 min-h-screen selection:bg-indigo-500 selection:text-white">
+  <body class="antialiased bg-slate-950 text-slate-100 min-h-screen selection:bg-indigo-500 selection:text-white">
+    <!-- ── Splash Screen ── rendered before React hydrates ── -->
+    <div id="splash" role="status" aria-label="Loading MiraiQuest">
+      <div>
+        <div class="splash-title" aria-hidden="true">
+          <span>M</span>
+          <span class="accent">i</span>
+          <span>r</span>
+          <span>a</span>
+          <span>i</span>
+        </div>
+        <div class="splash-sub">MSOT · Gamified Learning</div>
+      </div>
+      <div class="splash-bar-wrap">
+        <div class="splash-bar"></div>
+      </div>
+    </div>
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

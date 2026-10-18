@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../../store/appStore';
 import { Assignment, AssignmentSubmission, Campus } from '../../types';
 import { GoogleSearchCodingModal } from '../student/GoogleSearchCodingModal';
@@ -25,6 +25,9 @@ import {
   UploadCloud,
   ChevronDown,
   X,
+  Loader2,
+  RefreshCw,
+  Download,
 } from 'lucide-react';
 
 export const FacultyAssignmentManager: React.FC = () => {
@@ -70,10 +73,17 @@ function solve(input) {
   return input;
 }`);
   const [newPlatformLink, setNewPlatformLink] = useState('');
-  const [attachedFiles, setAttachedFiles] = useState<{ name: string; size: string; type: string }[]>([
-    { name: 'Coursework_Lab_Guideline.pdf', size: '1.2 MB', type: 'application/pdf' },
-  ]);
+  const [attachedFiles, setAttachedFiles] = useState<{ name: string; size: string; type: string }[]>([]);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+
+  // PDF upload state
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfUploading, setPdfUploading] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState(0);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [pdfSuccess, setPdfSuccess] = useState<string | null>(null);
+  const [pdfDragOver, setPdfDragOver] = useState(false);
 
   // Grading form state for selected submission
   const [gradingSubId, setGradingSubId] = useState<string | null>(null);
@@ -92,6 +102,84 @@ function solve(input) {
             .reduce((sum, s) => sum + (s.grade || 0), 0) / gradedCount
         )
       : 24;
+
+  const handlePdfSelect = (file: File | null) => {
+    setPdfError(null);
+    setPdfSuccess(null);
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      setPdfError('Only PDF files are accepted. Please select a valid .pdf file.');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setPdfError(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum allowed is 20 MB.`);
+      return;
+    }
+    if (file.size === 0) {
+      setPdfError('The selected file appears to be empty. Please choose a valid PDF.');
+      return;
+    }
+    setPdfFile(file);
+  };
+
+  const handlePdfUpload = async () => {
+    if (!pdfFile) return;
+    setPdfUploading(true);
+    setPdfProgress(0);
+    setPdfError(null);
+    setPdfSuccess(null);
+
+    // Simulate progress while the request is in-flight
+    const progressInterval = setInterval(() => {
+      setPdfProgress((p) => (p < 85 ? p + 8 : p));
+    }, 300);
+
+    try {
+      const formData = new FormData();
+      // Field name must match multer's upload.single('pdf') on the backend
+      formData.append('pdf', pdfFile);
+      formData.append('subject', newSubject);
+      formData.append('topic', newTitle || 'General');
+      formData.append('count', '10');
+      formData.append('difficultyMix', 'balanced');
+
+      // Do NOT set Content-Type — the browser sets it automatically with the boundary
+      const res = await fetch('/api/teacher/pdf-to-mcq', {
+        method: 'POST',
+        body: formData,
+      });
+
+      clearInterval(progressInterval);
+      setPdfProgress(100);
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error ${res.status}`);
+      }
+
+      const data = await res.json();
+      const sizeStr = pdfFile.size < 1024 * 1024
+        ? `${(pdfFile.size / 1024).toFixed(0)} KB`
+        : `${(pdfFile.size / 1024 / 1024).toFixed(1)} MB`;
+
+      setAttachedFiles((prev) => [
+        ...prev.filter((f) => f.name !== pdfFile.name),
+        { name: pdfFile.name, size: sizeStr, type: 'application/pdf' },
+      ]);
+
+      setPdfSuccess(
+        `PDF uploaded! Extracted ${data.extractedLength?.toLocaleString() ?? '?'} characters.${
+          data.ocrFallbackUsed ? ' (OCR fallback used for scanned pages)' : ''
+        } ${data.mcqs?.length ?? 0} MCQs generated.`
+      );
+    } catch (err: any) {
+      clearInterval(progressInterval);
+      setPdfProgress(0);
+      setPdfError(err.message || 'Upload failed. Check your connection and try again.');
+    } finally {
+      setPdfUploading(false);
+    }
+  };
 
   const handleCreateAssignment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -800,22 +888,158 @@ function solve(input) {
                 </div>
               )}
 
-              {/* Attachments Section */}
+              {/* PDF Upload Section */}
               <div>
-                <label className="block text-xs font-bold mb-1">Attached PDF Rubric & Guidelines</label>
+                <label className="block text-xs font-bold mb-1 flex items-center gap-1.5">
+                  <Paperclip className="w-3.5 h-3.5 text-indigo-400" />
+                  Attach PDF Rubric / Assignment Sheet
+                  <span className={`text-[10px] font-normal ml-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                    (PDF only · max 20 MB)
+                  </span>
+                </label>
+
+                {/* Drag & Drop Zone */}
                 <div
-                  className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
-                    isDark ? 'bg-slate-950 border-slate-800 text-slate-300' : 'bg-slate-50 border-slate-300 text-slate-700'
+                  onDragOver={(e) => { e.preventDefault(); setPdfDragOver(true); }}
+                  onDragLeave={() => setPdfDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setPdfDragOver(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handlePdfSelect(file);
+                  }}
+                  onClick={() => pdfInputRef.current?.click()}
+                  className={`relative p-5 rounded-xl border-2 border-dashed text-center cursor-pointer transition-all ${
+                    pdfDragOver
+                      ? 'border-indigo-500 bg-indigo-500/10'
+                      : isDark
+                      ? 'border-slate-700 bg-slate-950 hover:border-slate-600 hover:bg-slate-900'
+                      : 'border-slate-300 bg-slate-50 hover:border-slate-400 hover:bg-white'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <Paperclip className="w-4 h-4 text-indigo-400" />
-                    <span>Lab5_Specification_and_Rubric.pdf (1.4 MB)</span>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-semibold">
-                    Attached
-                  </span>
+                  <input
+                    ref={pdfInputRef}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="hidden"
+                    onChange={(e) => handlePdfSelect(e.target.files?.[0] ?? null)}
+                  />
+                  <UploadCloud className={`w-6 h-6 mx-auto mb-1.5 ${
+                    pdfDragOver ? 'text-indigo-400' : isDark ? 'text-slate-500' : 'text-slate-400'
+                  }`} />
+                  {pdfFile ? (
+                    <div className="text-xs space-y-0.5">
+                      <div className="font-semibold text-emerald-400 flex items-center justify-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {pdfFile.name}
+                      </div>
+                      <div className={isDark ? 'text-slate-400' : 'text-slate-500'}>
+                        {pdfFile.size < 1024 * 1024
+                          ? `${(pdfFile.size / 1024).toFixed(0)} KB`
+                          : `${(pdfFile.size / 1024 / 1024).toFixed(1)} MB`}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs">
+                      <div className={`font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                        Drop PDF here or <span className="text-indigo-400 underline">Browse</span>
+                      </div>
+                      <div className={isDark ? 'text-slate-500' : 'text-slate-400'}>
+                        Drag and drop your PDF rubric or assignment sheet.
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                {/* Progress Bar */}
+                {pdfUploading && (
+                  <div className="mt-2 space-y-1">
+                    <div className={`h-1.5 rounded-full overflow-hidden ${
+                      isDark ? 'bg-slate-800' : 'bg-slate-200'
+                    }`}>
+                      <div
+                        className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                        style={{ width: `${pdfProgress}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-indigo-400">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Uploading & extracting text… {pdfProgress}%</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error */}
+                {pdfError && (
+                  <div className="mt-2 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>{pdfError}</span>
+                  </div>
+                )}
+
+                {/* Success */}
+                {pdfSuccess && (
+                  <div className="mt-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    <span>{pdfSuccess}</span>
+                  </div>
+                )}
+
+                {/* Upload / Remove buttons */}
+                {pdfFile && !pdfUploading && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handlePdfUpload}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all cursor-pointer"
+                    >
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      Upload & Extract MCQs
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPdfFile(null);
+                        setPdfError(null);
+                        setPdfSuccess(null);
+                        setPdfProgress(0);
+                        if (pdfInputRef.current) pdfInputRef.current.value = '';
+                      }}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs transition-colors cursor-pointer ${
+                        isDark
+                          ? 'border-slate-800 text-slate-400 hover:text-rose-400 hover:border-rose-500/30'
+                          : 'border-slate-200 text-slate-500 hover:text-rose-600 hover:border-rose-200'
+                      }`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Remove
+                    </button>
+                  </div>
+                )}
+
+                {/* Already-attached files */}
+                {attachedFiles.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {attachedFiles.map((f, i) => (
+                      <span
+                        key={i}
+                        className={`text-[10px] px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                          isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-600'
+                        }`}
+                      >
+                        <Paperclip className="w-3 h-3 text-indigo-400" />
+                        {f.name} ({f.size})
+                        <button
+                          type="button"
+                          onClick={() => setAttachedFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                          className="ml-1 text-slate-500 hover:text-rose-400"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Submit Buttons */}

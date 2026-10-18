@@ -113,6 +113,89 @@ export async function getHinglishExplanation(
   }
 }
 
+export interface SearchProblemResult {
+  id: string;
+  title: string;
+  platform: 'leetcode' | 'hackerrank' | 'codeforces';
+  platformProblemNumber?: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  xpReward: number;
+  category: string;
+  topic: string;
+  tags: string[];
+  descriptionSummary: string;
+  sourceUrl: string;
+  functionName: string;
+}
+
+export interface SearchProblemsResponse {
+  success: boolean;
+  problems: SearchProblemResult[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  topic: string;
+  error?: string;
+}
+
+/**
+ * Search coding problems via the backend /api/gemini/search-coding-problems endpoint.
+ * The backend returns a paginated `problems[]` array — never a single `problem`.
+ * Root-cause fix: old code was reading `data.problem` (undefined) instead of `data.problems`.
+ */
+export async function searchCodingProblems(
+  query: string,
+  topic: string = '',
+  platform: 'all' | 'leetcode' | 'hackerrank' | 'codeforces' = 'all',
+  difficulty: 'all' | 'easy' | 'medium' | 'hard' = 'all',
+  page: number = 1,
+  pageSize: number = 10
+): Promise<SearchProblemsResponse> {
+  try {
+    console.log(`[Search] Querying backend: query="${query}" topic="${topic}" platform="${platform}" difficulty="${difficulty}" page=${page}`);
+    const res = await fetch('/api/gemini/search-coding-problems', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, topic, platform, difficulty, page, pageSize }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => `HTTP ${res.status}`);
+      throw new Error(`Server error ${res.status}: ${errText}`);
+    }
+
+    const data = await res.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Search returned no results');
+    }
+
+    return {
+      success: true,
+      problems: Array.isArray(data.problems) ? data.problems : [],
+      totalCount: data.totalCount ?? 0,
+      page: data.page ?? page,
+      pageSize: data.pageSize ?? pageSize,
+      hasMore: Boolean(data.hasMore),
+      topic: data.topic ?? topic,
+    };
+  } catch (err: any) {
+    console.error('[Search] Backend search failed:', err.message);
+    return {
+      success: false,
+      problems: [],
+      totalCount: 0,
+      page,
+      pageSize,
+      hasMore: false,
+      topic,
+      error: err.message || 'Search failed. Please try again.',
+    };
+  }
+}
+
+// Keep the old name as an alias for any legacy callers (GoogleSearchCodingModal will be updated)
 export async function searchCodingProblemViaGoogle(
   query: string,
   platform: 'all' | 'leetcode' | 'hackerrank' | 'codeforces' = 'all',
@@ -124,34 +207,13 @@ export async function searchCodingProblemViaGoogle(
   sources: string[];
   isGrounded: boolean;
 }> {
-  try {
-    const res = await fetch('/api/gemini/search-coding-problems', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, platform, difficulty }),
-    });
-
-    if (!res.ok) {
-      throw new Error(`Server returned ${res.status}`);
-    }
-
-    const data = await res.json();
-    return {
-      success: true,
-      problem: data.problem,
-      searchQueries: data.searchQueries || [query],
-      sources: data.sources || [],
-      isGrounded: Boolean(data.isGrounded),
-    };
-  } catch (err: any) {
-    console.warn('Google Search client request fallback:', err);
-    return {
-      success: false,
-      problem: null,
-      searchQueries: [query],
-      sources: [],
-      isGrounded: false,
-    };
-  }
+  const result = await searchCodingProblems(query, '', platform, difficulty, 1, 10);
+  return {
+    success: result.success && result.problems.length > 0,
+    problem: result.problems[0] ?? null,
+    searchQueries: [`${platform === 'all' ? '' : platform + ' '}${query}`.trim()],
+    sources: result.problems.map((p) => p.sourceUrl),
+    isGrounded: false,
+  };
 }
 

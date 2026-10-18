@@ -1,4 +1,8 @@
-import { PDFParse } from 'pdf-parse';
+// pdf-parse ESM bundle does not have a default export — use namespace import
+import * as pdfParseModule from 'pdf-parse';
+// The actual parse function may be on .default or the module itself
+const pdfParse: (buffer: Buffer) => Promise<{ text: string; numpages: number }> =
+  (pdfParseModule as any).default ?? (pdfParseModule as any);
 import { createWorker } from 'tesseract.js';
 import { GoogleGenAI } from '@google/genai';
 
@@ -23,16 +27,12 @@ export async function extractTextFromPdf(buffer: Buffer): Promise<{
   let ocrFallbackUsed = false;
 
   try {
-    const parser: any = new PDFParse({ data: buffer });
-    if (typeof parser.load === 'function') {
-      await parser.load();
-    }
-    const rawText = typeof parser.getText === 'function' ? await parser.getText() : '';
-    if (rawText) {
-      text = String(typeof rawText === 'object' && rawText.text ? rawText.text : rawText).trim();
-    }
+    // pdfParse is a function: pdfParse(buffer) → { text, numpages, … }
+    const result = await pdfParse(buffer);
+    text = (result.text || '').trim();
+    console.log(`[PDF Parser] Extracted ${text.length} characters from ${result.numpages} page(s).`);
   } catch (pdfErr) {
-    console.warn('[PDF Parser] Direct pdf-parse extraction encountered an issue, trying OCR:', pdfErr);
+    console.warn('[PDF Parser] pdf-parse extraction failed, trying OCR fallback:', pdfErr);
   }
 
   // If text is suspiciously short or empty (e.g. scanned image notes or presentation)

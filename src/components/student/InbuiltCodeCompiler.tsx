@@ -674,9 +674,6 @@ export const InbuiltCodeCompiler: React.FC = () => {
       <GoogleSearchCodingModal
         isOpen={showSearchModal}
         onClose={() => setShowSearchModal(false)}
-        onSelectProblem={(p) => {
-          setSelectedProblemId(p.id);
-        }}
       />
     </div>
   );
