@@ -22,6 +22,9 @@ import {
   Assignment,
   AssignmentSubmission,
   AppNotification,
+  NotificationPreferences,
+  AntiCheatLog,
+  AutoSubmittedQuiz,
 } from '../types';
 import {
   CAMPUSES,
@@ -127,13 +130,36 @@ interface AppContextType {
   notifications: AppNotification[];
   addNotification: (notif: AppNotification) => void;
   markNotificationAsRead: (id: string) => void;
+  deleteNotification: (id: string) => void;
+  markAllNotificationsAsRead: () => void;
+  notificationPreferences: NotificationPreferences;
+  updateNotificationPreferences: (prefs: Partial<NotificationPreferences>) => void;
+
+  // Code drafts
+  studentDrafts: Record<string, Record<string, string>>;
+  saveStudentDraft: (problemId: string, lang: string, code: string) => void;
+
+  // Question Bank operations
+  batchImportQuestions: (questions: Question[]) => { importedCount: number; errors: string[] };
+  deleteQuestion: (questionId: string) => void;
+  updateQuestion: (questionId: string, updates: Partial<Question>) => void;
+
+  // Anti-Cheat tracking
+  antiCheatLogs: AntiCheatLog[];
+  logAntiCheatEvent: (event: Omit<AntiCheatLog, 'id' | 'timestamp'>) => void;
+  autoSubmittedQuizzes: Record<string, AutoSubmittedQuiz>;
+  autoSubmitQuiz: (attempt: Omit<AutoSubmittedQuiz, 'id' | 'submittedAt' | 'locked'>) => Promise<void>;
+  grantQuizRetake: (quizId: string, studentId: string, reason: string, grantedByName: string) => Promise<void>;
+
+  // MCQ Assignments
+  submitMcqAssignment: (asgnId: string, studentId: string, answers: Record<string, number>, timeSpentSeconds: number) => { success: boolean; pointsAwarded: number; score: number; total: number; message: string };
 
   // User Profile Modal
   isProfileModalOpen: boolean;
   profileModalUserId: string | null;
   profileModalRole: 'student' | 'faculty' | 'admin';
-  profileActiveTab: 'profile' | 'batchmates' | 'social' | 'account' | 'privacy' | 'appearance';
-  setProfileActiveTab: (tab: 'profile' | 'batchmates' | 'social' | 'account' | 'privacy' | 'appearance') => void;
+  profileActiveTab: 'profile' | 'batchmates' | 'social' | 'account' | 'privacy' | 'appearance' | 'notifications';
+  setProfileActiveTab: (tab: 'profile' | 'batchmates' | 'social' | 'account' | 'privacy' | 'appearance' | 'notifications') => void;
   openProfileModal: (
     userId?: string,
     roleOverride?: 'student' | 'faculty' | 'admin',
@@ -389,20 +415,275 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [profileModalUserId, setProfileModalUserId] = useState<string | null>(null);
   const [profileModalRole, setProfileModalRole] = useState<'student' | 'faculty' | 'admin'>('student');
-  const [profileActiveTab, setProfileActiveTab] = useState<'profile' | 'batchmates' | 'social' | 'account' | 'privacy' | 'appearance'>('profile');
+  const [profileActiveTab, setProfileActiveTab] = useState<'profile' | 'batchmates' | 'social' | 'account' | 'privacy' | 'appearance' | 'notifications'>('profile');
 
   // Notifications State
   const [notifications, setNotifications] = useState<AppNotification[]>([
     {
-      id: 'notif_welcome',
-      userId: 'stud_rahul',
-      title: 'Welcome to MiraiQuest',
-      message: 'Explore your daily quests, challenges, and peer help board!',
-      type: 'streak',
-      timestamp: new Date().toISOString(),
+      id: 'notif_asgn_new',
+      title: 'New Coursework Published',
+      message: 'Prof. Priya Nair published "Data Structures Mid-Term Assignment" for your section.',
+      type: 'assignment',
+      category: 'academic',
+      timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
       read: false,
+      link: 'coursework',
+    },
+    {
+      id: 'notif_battle_live',
+      title: 'Campus Battle is LIVE',
+      message: 'HI-Tech vs Rathinam weekly campus battle round has commenced. Solve problems to earn points!',
+      type: 'battle',
+      category: 'battles',
+      timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+      read: false,
+      link: 'battles',
+    },
+    {
+      id: 'notif_doubt_answered',
+      title: 'Answer on your Technical Doubt',
+      message: 'Maya Sharma posted an answer to your doubt on "Recursion Call Stacks". Check and accept to award 15 XP.',
+      type: 'peer_accept',
+      category: 'doubts',
+      timestamp: new Date(Date.now() - 1000 * 60 * 240).toISOString(),
+      read: false,
+      link: 'peer_help',
+    },
+    {
+      id: 'notif_streak_alert',
+      title: 'Streak at Risk!',
+      message: 'Complete your daily micro-quiz before midnight to maintain your 5-day streak.',
+      type: 'streak',
+      category: 'gamification',
+      timestamp: new Date(Date.now() - 1000 * 60 * 360).toISOString(),
+      read: true,
+      link: 'dashboard',
     },
   ]);
+
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>(() => {
+    try {
+      const saved = localStorage.getItem('mq_notif_prefs');
+      return saved ? JSON.parse(saved) : {
+        academic: true,
+        battles: true,
+        doubts: true,
+        gamification: true,
+        pushEnabled: false,
+        quietHoursEnabled: false,
+        quietHoursStart: '22:00',
+        quietHoursEnd: '07:00',
+      };
+    } catch {
+      return {
+        academic: true,
+        battles: true,
+        doubts: true,
+        gamification: true,
+        pushEnabled: false,
+        quietHoursEnabled: false,
+        quietHoursStart: '22:00',
+        quietHoursEnd: '07:00',
+      };
+    }
+  });
+
+  const updateNotificationPreferences = (prefs: Partial<NotificationPreferences>) => {
+    setNotificationPreferences((prev) => {
+      const next = { ...prev, ...prefs };
+      try {
+        localStorage.setItem('mq_notif_prefs', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const deleteNotification = (id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  const markAllNotificationsAsRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+
+  // Student code drafts per problem and language
+  const [studentDrafts, setStudentDrafts] = useState<Record<string, Record<string, string>>>(() => {
+    try {
+      const saved = localStorage.getItem('mq_student_drafts');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const saveStudentDraft = (problemId: string, lang: string, codeStr: string) => {
+    setStudentDrafts((prev) => {
+      const next = {
+        ...prev,
+        [problemId]: {
+          ...(prev[problemId] || {}),
+          [lang]: codeStr,
+        },
+      };
+      try {
+        localStorage.setItem('mq_student_drafts', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  // Question bank batch operations
+  const batchImportQuestions = (newQuestions: Question[]) => {
+    setQuestions((prev) => [...newQuestions, ...prev]);
+    return { importedCount: newQuestions.length, errors: [] };
+  };
+
+  const deleteQuestion = (questionId: string) => {
+    setQuestions((prev) => prev.filter((q) => q.id !== questionId));
+  };
+
+  const updateQuestion = (questionId: string, updates: Partial<Question>) => {
+    setQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, ...updates } : q)));
+  };
+
+  // Anti-Cheat Logs & Auto-Submission tracking
+  const [antiCheatLogs, setAntiCheatLogs] = useState<AntiCheatLog[]>([]);
+  const [autoSubmittedQuizzes, setAutoSubmittedQuizzes] = useState<Record<string, AutoSubmittedQuiz>>({});
+
+  const logAntiCheatEvent = async (event: Omit<AntiCheatLog, 'id' | 'timestamp'>) => {
+    const newLog: AntiCheatLog = {
+      ...event,
+      id: `ac_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toISOString(),
+    };
+    setAntiCheatLogs((prev) => [newLog, ...prev]);
+
+    try {
+      await fetch('/api/anticheat/log-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newLog),
+      });
+    } catch {}
+  };
+
+  const autoSubmitQuiz = async (attempt: Omit<AutoSubmittedQuiz, 'id' | 'submittedAt' | 'locked'>) => {
+    const record: AutoSubmittedQuiz = {
+      ...attempt,
+      id: `as_${attempt.quizId}_${attempt.studentId}`,
+      submittedAt: new Date().toISOString(),
+      locked: true,
+    };
+    setAutoSubmittedQuizzes((prev) => ({ ...prev, [record.id]: record }));
+
+    try {
+      await fetch('/api/quiz/auto-submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record),
+      });
+    } catch {}
+  };
+
+  const grantQuizRetake = async (quizId: string, studentId: string, reason: string, grantedByName: string) => {
+    const recordId = `as_${quizId}_${studentId}`;
+    setAutoSubmittedQuizzes((prev) => {
+      if (!prev[recordId]) return prev;
+      return {
+        ...prev,
+        [recordId]: {
+          ...prev[recordId],
+          locked: false,
+          retakeGranted: true,
+          retakeReason: reason,
+          retakeGrantedBy: grantedByName,
+        },
+      };
+    });
+
+    try {
+      await fetch('/api/quiz/grant-retake', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quizId, studentId, reason, grantedByName }),
+      });
+    } catch {}
+  };
+
+  // MCQ Assignment Submission & Auto-Grading
+  const submitMcqAssignment = (
+    asgnId: string,
+    studentId: string,
+    answers: Record<string, number>,
+    timeSpentSeconds: number
+  ) => {
+    const asgn = assignments.find((a) => a.id === asgnId);
+    if (!asgn || !asgn.mcqs) {
+      return { success: false, pointsAwarded: 0, score: 0, total: 0, message: 'Assignment not found.' };
+    }
+
+    let correctCount = 0;
+    asgn.mcqs.forEach((m) => {
+      if (answers[m.id] === m.correctOptionIndex) {
+        correctCount++;
+      }
+    });
+
+    const now = new Date();
+    const due = new Date(`${asgn.dueDate}T${asgn.dueTime || '23:59'}`);
+    const isLate = now > due;
+    const pointsAwarded = isLate ? 0 : asgn.pointsXp || 20;
+
+    const submission: AssignmentSubmission = {
+      id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      assignmentId: asgnId,
+      studentId,
+      studentName: activeStudent.name,
+      campus: activeStudent.campus,
+      section: activeStudent.section,
+      submittedAt: new Date().toISOString(),
+      status: isLate ? 'late' : 'graded',
+      grade: pointsAwarded,
+      maxPoints: asgn.pointsXp || 20,
+      mcqScore: correctCount,
+      mcqTotal: asgn.mcqs.length,
+      mcqAnswers: answers,
+      feedback: `MCQ Score: ${correctCount}/${asgn.mcqs.length} correct (${Math.round(
+        (correctCount / asgn.mcqs.length) * 100
+      )}%). ${isLate ? 'Late submission: 0 XP recorded.' : 'Submitted on time! Verified XP recorded.'}`,
+    };
+
+    setAssignmentSubmissions((prev) => [
+      submission,
+      ...prev.filter((s) => s.assignmentId !== asgnId || s.studentId !== studentId),
+    ]);
+
+    if (pointsAwarded > 0) {
+      triggerXpEvent({
+        eventId: `ev_asgn_${Date.now()}`,
+        studentId,
+        actionKey: 'submit_classwork',
+        timestamp: new Date().toISOString(),
+        metadata: {
+          assignmentId: asgnId,
+          title: asgn.title,
+          mcqScore: correctCount,
+        },
+      });
+    }
+
+    return {
+      success: true,
+      pointsAwarded,
+      score: correctCount,
+      total: asgn.mcqs.length,
+      message: isLate
+        ? `MCQ test submitted! Score: ${correctCount}/${asgn.mcqs.length}. Submitted past due date (${asgn.dueDate}), so 0 XP was awarded.`
+        : `Great job! Score: ${correctCount}/${asgn.mcqs.length} (${Math.round((correctCount / asgn.mcqs.length) * 100)}%). Earned +${pointsAwarded} XP!`,
+    };
+  };
+
+
 
   const [rankProgressModal, setRankProgressModal] = useState<{
     show: boolean;
@@ -611,6 +892,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const activeStudent = students.find((s) => s.id === activeStudentId) || students[0];
   const activeFaculty = facultyList.find((f) => f.id === activeFacultyId) || facultyList[0];
+
+  // Real-time WebSocket Gateway
+  useEffect(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/notifications?userId=${
+      role === 'student' ? activeStudent.id : activeFaculty.id
+    }&role=${role}&campus=${activeStudent.campus}&year=${activeStudent.year}&section=${activeStudent.section}`;
+
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket(wsUrl);
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'notification' && msg.data) {
+            setNotifications((prev) => [msg.data, ...prev]);
+          }
+        } catch {}
+      };
+    } catch {}
+
+    return () => {
+      if (ws) ws.close();
+    };
+  }, [role, activeStudent.id, activeFaculty.id, activeStudent.campus, activeStudent.year, activeStudent.section]);
 
   const triggerConfetti = () => {
     confetti({
@@ -1843,6 +2149,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         notifications,
         addNotification,
         markNotificationAsRead,
+        deleteNotification,
+        markAllNotificationsAsRead,
+        notificationPreferences,
+        updateNotificationPreferences,
+        studentDrafts,
+        saveStudentDraft,
+        batchImportQuestions,
+        deleteQuestion,
+        updateQuestion,
+        antiCheatLogs,
+        logAntiCheatEvent,
+        autoSubmittedQuizzes,
+        autoSubmitQuiz,
+        grantQuizRetake,
+        submitMcqAssignment,
         isProfileModalOpen,
         profileModalUserId,
         profileModalRole,

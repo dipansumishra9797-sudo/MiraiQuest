@@ -5,6 +5,7 @@ import {
   Platform,
   Difficulty,
   SupportedLanguage,
+  getLanguageStarter,
 } from '../../data/codingProblems';
 import { runProblemCode, RunSummary } from '../../modules/codeRunner';
 import { useApp } from '../../store/appStore';
@@ -31,8 +32,7 @@ import {
 } from 'lucide-react';
 
 export const InbuiltCodeCompiler: React.FC = () => {
-  const { activeStudent, triggerXpEvent, allCodingProblems, isDark } = useApp();
-
+  const { activeStudent, triggerXpEvent, allCodingProblems, isDark, studentDrafts, saveStudentDraft } = useApp();
 
   const [showSearchModal, setShowSearchModal] = useState<boolean>(false);
 
@@ -46,7 +46,10 @@ export const InbuiltCodeCompiler: React.FC = () => {
     allCodingProblems.find((p) => p.id === selectedProblemId) || allCodingProblems[0];
 
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('javascript');
-  const [code, setCode] = useState<string>(activeProblem?.starterCode?.javascript || '');
+  const [code, setCode] = useState<string>(() => {
+    const saved = studentDrafts?.[allCodingProblems[0]?.id]?.[selectedLanguage];
+    return saved || getLanguageStarter(allCodingProblems[0] || {}, selectedLanguage);
+  });
   const [activeTestTab, setActiveTestTab] = useState<number>(0);
   const [customInputText, setCustomInputText] = useState<string>('');
 
@@ -61,12 +64,15 @@ export const InbuiltCodeCompiler: React.FC = () => {
   } | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
 
-  // Sync starter code when problem or language changes
+  // Sync starter code or saved student draft when problem or language changes
   useEffect(() => {
-    setCode(activeProblem.starterCode[selectedLanguage]);
-    setRunSummary(null);
-    setActiveTestTab(0);
-  }, [selectedProblemId, selectedLanguage]);
+    if (activeProblem) {
+      const saved = studentDrafts?.[activeProblem.id]?.[selectedLanguage];
+      setCode(saved || getLanguageStarter(activeProblem, selectedLanguage));
+      setRunSummary(null);
+      setActiveTestTab(0);
+    }
+  }, [selectedProblemId, selectedLanguage, activeProblem]);
 
   // Filtered problems list
   const filteredProblems = allCodingProblems.filter((p) => {
@@ -84,6 +90,7 @@ export const InbuiltCodeCompiler: React.FC = () => {
       const end = textarea.selectionEnd;
       const newCode = code.substring(0, start) + '  ' + code.substring(end);
       setCode(newCode);
+      saveStudentDraft(activeProblem.id, selectedLanguage, newCode);
       setTimeout(() => {
         textarea.selectionStart = textarea.selectionEnd = start + 2;
       }, 0);
@@ -97,7 +104,9 @@ export const InbuiltCodeCompiler: React.FC = () => {
   };
 
   const handleResetCode = () => {
-    setCode(activeProblem.starterCode[selectedLanguage]);
+    const freshTemplate = getLanguageStarter(activeProblem, selectedLanguage);
+    setCode(freshTemplate);
+    saveStudentDraft(activeProblem.id, selectedLanguage, freshTemplate);
     setRunSummary(null);
   };
 
@@ -446,11 +455,12 @@ export const InbuiltCodeCompiler: React.FC = () => {
                 <select
                   value={selectedLanguage}
                   onChange={(e) => setSelectedLanguage(e.target.value as SupportedLanguage)}
-                  className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white font-semibold focus:outline-none focus:border-indigo-500"
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
                 >
                   <option value="javascript">JavaScript (Node ES2024)</option>
                   <option value="python">Python 3.12</option>
-                  <option value="cpp">C++ (GCC 13)</option>
+                  <option value="c">C (GCC C11)</option>
+                  <option value="cpp">C++ (C++17 / GCC 13)</option>
                   <option value="java">Java (OpenJDK 21)</option>
                 </select>
               </div>
@@ -460,7 +470,7 @@ export const InbuiltCodeCompiler: React.FC = () => {
                 <button
                   onClick={handleResetCode}
                   title="Reset to boilerplate"
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs transition-colors border border-slate-800"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs transition-colors border border-slate-800 cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Reset</span>
@@ -468,7 +478,7 @@ export const InbuiltCodeCompiler: React.FC = () => {
                 <button
                   onClick={handleCopyCode}
                   title="Copy code"
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs transition-colors border border-slate-800"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs transition-colors border border-slate-800 cursor-pointer"
                 >
                   {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                   <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy'}</span>
@@ -490,7 +500,10 @@ export const InbuiltCodeCompiler: React.FC = () => {
               {/* Textarea */}
               <textarea
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                onChange={(e) => {
+                  setCode(e.target.value);
+                  saveStudentDraft(activeProblem.id, selectedLanguage, e.target.value);
+                }}
                 onKeyDown={handleKeyDown}
                 spellCheck={false}
                 className="flex-1 p-4 bg-transparent text-slate-100 resize-none outline-none leading-6 font-mono overflow-x-auto whitespace-pre tab-2"

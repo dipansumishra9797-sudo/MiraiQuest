@@ -1,8 +1,19 @@
 import express, { Request, Response } from 'express';
+import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import multer from 'multer';
 import { GoogleGenAI } from '@google/genai';
+import { executeCode } from './server/codeRunnerService';
+import { queryCodingProblems, generateOriginalPracticeProblem, CODING_SEARCH_CATALOG } from './server/searchService';
+import { extractTextFromPdf, generateMcqsFromText } from './server/pdfService';
+import {
+  initWebSocketServer,
+  dispatchNotification,
+  getVapidPublicKey,
+  savePushSubscription,
+} from './server/notificationService';
 
 dotenv.config();
 
@@ -12,7 +23,14 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Multer in-memory storage for PDF processing (max 25MB)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 },
+});
 
 // Initialize Google GenAI on server-side only
 const apiKey = process.env.GEMINI_API_KEY;
@@ -161,522 +179,296 @@ Keep it engaging, friendly, easy to grasp, and encouraging in 2-3 sentences.`;
   }
 });
 
-// 4. Google Search & Live Fetch for LeetCode, HackerRank, Codeforces
+// 4. Code Execution Service (/api/run) for C++, C, Java, Python, and JavaScript
+app.post('/api/run', async (req: Request, res: Response) => {
+  const { language, code, problem, onlyVisibleCases = false } = req.body;
+
+  if (!language || !code || !problem) {
+    return res.status(400).json({
+      error: 'Missing required parameters: language, code, and problem are required.',
+    });
+  }
+
+  try {
+    const summary = await executeCode({
+      language,
+      code,
+      problem,
+      onlyVisibleCases,
+    });
+    return res.json(summary);
+  } catch (err: any) {
+    console.error('Execution service failure:', err);
+    return res.status(500).json({
+      error: `Execution service error: ${err.message || 'Unknown compiler failure'}`,
+    });
+  }
+});
+
+// 5. Enhanced Multi-Topic Coding Search (Fixing LeetCode 20 root cause)
 app.post('/api/gemini/search-coding-problems', async (req: Request, res: Response) => {
-  const { query, platform = 'all', difficulty = 'all' } = req.body;
+  const { query = '', topic = '', platform = 'all', difficulty = 'all', page = 1, pageSize = 10 } = req.body;
 
-  if (!query || typeof query !== 'string') {
-    return res.status(400).json({ error: 'Search query is required' });
+  if (!query && !topic) {
+    return res.status(400).json({
+      success: false,
+      error: 'A search query keyword or topic is required.',
+      problems: [],
+    });
   }
 
-  // If AI is configured, execute real Google Search Grounding with gemini-2.5-flash
-  if (ai) {
-    try {
-      const prompt = `Use Google Search to find and extract the exact coding problem from ${
-        platform === 'all' ? 'LeetCode, HackerRank, or Codeforces' : platform
-      } matching this query: "${query}".
-Difficulty filter if applicable: ${difficulty}.
+  try {
+    const searchData = queryCodingProblems({
+      query: String(query),
+      topic: String(topic),
+      platform: platform as any,
+      difficulty: difficulty as any,
+      page: Number(page) || 1,
+      pageSize: Number(pageSize) || 10,
+    });
 
-Retrieve:
-1. Exact official problem title and platform (must be 'leetcode', 'hackerrank', or 'codeforces').
-2. Difficulty ('easy', 'medium', 'hard') and XP points (easy=10, medium=20, hard=40).
-3. Problem category and relevant algorithmic tags.
-4. Clean Markdown problem description, input/output specifications, and constraints.
-5. At least two input/output examples with explanations.
-6. A standard function name in camelCase (e.g. isValid, climbStairs, compareTriplets).
-7. Starter code templates in JavaScript, Python, C++, and Java.
-8. At least 3 structured test cases (each with id, input array, inputFormatted string, expectedOutput, expectedOutputFormatted string).
+    return res.json({
+      success: true,
+      problems: searchData.problems,
+      totalCount: searchData.totalCount,
+      page: searchData.page,
+      pageSize: searchData.pageSize,
+      hasMore: searchData.hasMore,
+      topic: searchData.topic,
+      searchQueries: [
+        `competitive programming ${query || topic} problems`,
+        `site:leetcode.com/problems/ ${query || topic}`,
+      ],
+      sources: searchData.problems.map((p) => p.sourceUrl),
+    });
+  } catch (err: any) {
+    console.error('Coding search endpoint error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Search failed',
+      problems: [],
+    });
+  }
+});
 
-Return ONLY a valid JSON object matching this exact schema:
-{
-  "id": "string",
-  "title": "string",
-  "platform": "leetcode" | "hackerrank" | "codeforces",
-  "platformProblemNumber": "string optional",
-  "difficulty": "easy" | "medium" | "hard",
-  "xpReward": number,
-  "category": "string",
-  "tags": ["string"],
-  "description": "string",
-  "constraints": ["string"],
-  "examples": [
-    { "input": "string", "output": "string", "explanation": "string" }
-  ],
-  "functionName": "string",
-  "starterCode": {
-    "javascript": "string",
-    "python": "string",
-    "cpp": "string",
-    "java": "string"
-  },
-  "testCases": [
-    {
-      "id": "string",
-      "input": [],
-      "inputFormatted": "string",
-      "expectedOutput": null,
-      "expectedOutputFormatted": "string",
-      "explanation": "string"
-    }
-  ],
-  "sourceUrl": "string"
-}`;
+// 6. Generate ORIGINAL Non-Infringing Practice Problem inspired by search topic
+app.post('/api/gemini/generate-original-problem', (req: Request, res: Response) => {
+  try {
+    const originalProblem = generateOriginalPracticeProblem(req.body);
+    return res.json({
+      success: true,
+      problem: originalProblem,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to generate original problem',
+    });
+  }
+});
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-        },
+// 7. Teacher: PDF to MCQ Assignment Generator
+app.post('/api/teacher/pdf-to-mcq', upload.single('pdf'), async (req: Request, res: Response) => {
+  if (!req.file || !req.file.buffer) {
+    return res.status(400).json({
+      success: false,
+      error: 'No PDF file uploaded. Please select a valid PDF document.',
+    });
+  }
+
+  const { subject = 'Computer Science', topic = 'Core Principles', count = 10, difficultyMix = 'balanced' } = req.body;
+
+  try {
+    console.log(`[PDF Upload] Received ${req.file.originalname} (${(req.file.size / 1024).toFixed(1)} KB)`);
+
+    // Extract text with pdf-parse and OCR fallback
+    const { text, ocrFallbackUsed } = await extractTextFromPdf(req.file.buffer);
+
+    if (!text || text.trim().length === 0) {
+      return res.status(422).json({
+        success: false,
+        error: 'Unable to extract readable text from PDF. The document may be empty, password-protected, or unscannable.',
       });
-
-      const responseText = response.text || '';
-      // Extract JSON if wrapped in markdown fences
-      let jsonStr = responseText.trim();
-      const match = jsonStr.match(/```json\s*([\s\S]*?)\s*```/) || jsonStr.match(/```\s*([\s\S]*?)\s*```/);
-      if (match) {
-        jsonStr = match[1];
-      }
-
-      const problem = JSON.parse(jsonStr);
-
-      // Extract search queries and grounding metadata if available
-      const searchQueries = response.candidates?.[0]?.groundingMetadata?.webSearchQueries || [
-        `${query} ${platform !== 'all' ? platform : 'leetcode hackerrank codeforces'} problem`,
-      ];
-      const sources =
-        response.candidates?.[0]?.groundingMetadata?.groundingChunks
-          ?.map((c: any) => c.web?.uri)
-          .filter(Boolean) || [];
-
-      return res.json({
-        success: true,
-        problem,
-        searchQueries,
-        sources,
-        isGrounded: true,
-        platformSource: problem.platform || platform,
-      });
-    } catch (err: any) {
-      console.warn('Google Search grounding fallback invoked:', err?.message || err);
-      // Fall through to fallback catalog
     }
+
+    // Generate MCQs
+    const mcqs = await generateMcqsFromText({
+      text,
+      subject,
+      topic,
+      count: Number(count) || 10,
+      difficultyMix: difficultyMix as any,
+      ai,
+    });
+
+    return res.json({
+      success: true,
+      mcqs,
+      originalPdfName: req.file.originalname,
+      textExcerpt: text.slice(0, 500) + '...',
+      extractedLength: text.length,
+      ocrFallbackUsed,
+    });
+  } catch (err: any) {
+    console.error('PDF to MCQ processing error:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to process PDF and generate MCQs',
+    });
   }
+});
 
-  // High-fidelity fallback catalog and dynamic generator
-  const qLower = query.toLowerCase();
+// 8. Anti-Cheat: Log Detected Event & Notify Teachers/Admins
+const antiCheatAuditLogs: any[] = [];
+app.post('/api/anticheat/log-event', async (req: Request, res: Response) => {
+  const { studentId, studentName, campus, section, eventType, quizId, quizTitle, details, severity = 'medium' } = req.body;
 
-  // Curated catalog of classic LeetCode, HackerRank, Codeforces problems
-  const catalog: any[] = [
-    {
-      id: 'lc_20',
-      title: 'Valid Parentheses',
-      platform: 'leetcode',
-      platformProblemNumber: '20',
-      difficulty: 'easy',
-      xpReward: 10,
-      category: 'Stacks & Strings',
-      tags: ['Stack', 'String'],
-      description: `Given a string \`s\` containing just the characters \`'('\`, \`')'\`, \`'{'\`, \`'}'\`, \`'['\` and \`']'\`, determine if the input string is valid.
+  const logEntry = {
+    id: `ac_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    studentId,
+    studentName,
+    campus,
+    section,
+    eventType,
+    quizId,
+    quizTitle,
+    details: details || `Anti-cheat violation detected: ${eventType}`,
+    severity,
+    timestamp: new Date().toISOString(),
+  };
 
-An input string is valid if:
-1. Open brackets must be closed by the same type of brackets.
-2. Open brackets must be closed in the correct order.
-3. Every close bracket has a corresponding open bracket of the same type.`,
-      constraints: ['1 <= s.length <= 10^4', 's consists of parentheses only ()[]{}'],
-      examples: [
-        { input: 's = "()"', output: 'true', explanation: 'Matching pair of parentheses.' },
-        { input: 's = "()[]{}"', output: 'true', explanation: 'All pairs properly closed.' },
-        { input: 's = "(]"', output: 'false', explanation: 'Bracket types do not match.' },
-      ],
-      functionName: 'isValid',
-      starterCode: {
-        javascript: `function isValid(s) {
-  const stack = [];
-  const map = { ')': '(', '}': '{', ']': '[' };
-  for (const char of s) {
-    if (map[char]) {
-      if (stack.pop() !== map[char]) return false;
-    } else {
-      stack.push(char);
-    }
-  }
-  return stack.length === 0;
-}`,
-        python: `def isValid(s):
-    stack = []
-    mapping = {")": "(", "}": "{", "]": "["}
-    for char in s:
-        if char in mapping:
-            top = stack.pop() if stack else '#'
-            if mapping[char] != top:
-                return False
-        else:
-            stack.append(char)
-    return not stack`,
-        cpp: `bool isValid(string s) {
-    stack<char> st;
-    for (char c : s) {
-        if (c == '(' || c == '{' || c == '[') st.push(c);
-        else {
-            if (st.empty()) return false;
-            char top = st.top(); st.pop();
-            if (c == ')' && top != '(') return false;
-            if (c == '}' && top != '{') return false;
-            if (c == ']' && top != '[') return false;
-        }
-    }
-    return st.empty();
-}`,
-        java: `class Solution {
-    public boolean isValid(String s) {
-        Stack<Character> stack = new Stack<>();
-        for (char c : s.toCharArray()) {
-            if (c == '(' || c == '{' || c == '[') stack.push(c);
-            else {
-                if (stack.isEmpty()) return false;
-                char top = stack.pop();
-                if (c == ')' && top != '(') return false;
-                if (c == '}' && top != '{') return false;
-                if (c == ']' && top != '[') return false;
-            }
-        }
-        return stack.isEmpty();
-    }
-}`,
-      },
-      testCases: [
-        { id: 'tc_1', input: ['()'], inputFormatted: 's = "()"', expectedOutput: true, expectedOutputFormatted: 'true' },
-        { id: 'tc_2', input: ['()[]{}'], inputFormatted: 's = "()[]{}"', expectedOutput: true, expectedOutputFormatted: 'true' },
-        { id: 'tc_3', input: ['(]'], inputFormatted: 's = "(]"', expectedOutput: false, expectedOutputFormatted: 'false' },
-        { id: 'tc_4', input: ['{[]}'], inputFormatted: 's = "{[]}"', expectedOutput: true, expectedOutputFormatted: 'true' },
-      ],
-      sourceUrl: 'https://leetcode.com/problems/valid-parentheses/',
-    },
-    {
-      id: 'lc_70',
-      title: 'Climbing Stairs',
-      platform: 'leetcode',
-      platformProblemNumber: '70',
-      difficulty: 'easy',
-      xpReward: 10,
-      category: 'Dynamic Programming',
-      tags: ['Math', 'Dynamic Programming', 'Memoization'],
-      description: `You are climbing a staircase. It takes \`n\` steps to reach the top.
-Each time you can either climb 1 or 2 steps. In how many distinct ways can you climb to the top?`,
-      constraints: ['1 <= n <= 45'],
-      examples: [
-        { input: 'n = 2', output: '2', explanation: 'There are two ways: 1 step + 1 step, or 2 steps.' },
-        { input: 'n = 3', output: '3', explanation: 'There are three ways: 1+1+1, 1+2, or 2+1.' },
-      ],
-      functionName: 'climbStairs',
-      starterCode: {
-        javascript: `function climbStairs(n) {
-  if (n <= 2) return n;
-  let first = 1, second = 2;
-  for (let i = 3; i <= n; i++) {
-    const third = first + second;
-    first = second;
-    second = third;
-  }
-  return second;
-}`,
-        python: `def climbStairs(n):
-    if n <= 2:
-        return n
-    a, b = 1, 2
-    for _ in range(3, n + 1):
-        a, b = b, a + b
-    return b`,
-        cpp: `int climbStairs(int n) {
-    if (n <= 2) return n;
-    int a = 1, b = 2;
-    for (int i = 3; i <= n; ++i) {
-        int temp = a + b;
-        a = b;
-        b = temp;
-    }
-    return b;
-}`,
-        java: `class Solution {
-    public int climbStairs(int n) {
-        if (n <= 2) return n;
-        int a = 1, b = 2;
-        for (int i = 3; i <= n; i++) {
-            int c = a + b;
-            a = b;
-            b = c;
-        }
-        return b;
-    }
-}`,
-      },
-      testCases: [
-        { id: 'tc_1', input: [2], inputFormatted: 'n = 2', expectedOutput: 2, expectedOutputFormatted: '2' },
-        { id: 'tc_2', input: [3], inputFormatted: 'n = 3', expectedOutput: 3, expectedOutputFormatted: '3' },
-        { id: 'tc_3', input: [5], inputFormatted: 'n = 5', expectedOutput: 8, expectedOutputFormatted: '8' },
-      ],
-      sourceUrl: 'https://leetcode.com/problems/climbing-stairs/',
-    },
-    {
-      id: 'hr_compare_triplets',
-      title: 'Compare the Triplets',
-      platform: 'hackerrank',
-      platformProblemNumber: 'challenges/compare-the-triplets',
-      difficulty: 'easy',
-      xpReward: 10,
-      category: 'Arrays & Math',
-      tags: ['Arrays', 'Logic'],
-      description: `Alice and Bob each created one problem for HackerRank. A reviewer rates the two challenges, awarding points on a scale from 1 to 100 for three categories: problem clarity, originality, and difficulty.
+  antiCheatAuditLogs.push(logEntry);
+  console.log(`[Anti-Cheat Audit] Event logged: ${eventType} by ${studentName} (${campus} - ${section})`);
 
-The rating for Alice's challenge is the triplet \`a = [a[0], a[1], a[2]]\`, and the rating for Bob's challenge is \`b = [b[0], b[1], b[2]]\`.
+  // Dispatch real-time alert to teachers and admins
+  await dispatchNotification({
+    id: `notif_ac_${Date.now()}`,
+    title: `Anti-Cheat Alert: ${studentName}`,
+    message: `${studentName} (${section}, ${campus}) triggered ${eventType.replace('_', ' ')} during ${quizTitle || 'Quiz'}.`,
+    type: 'anti_cheat',
+    category: 'audit',
+    timestamp: new Date().toISOString(),
+    read: false,
+    targetRole: 'faculty',
+    targetCampus: campus,
+  });
 
-Your task is to find their comparison points by comparing \`a[i]\` with \`b[i]\`:
-- If a[i] > b[i], then Alice is awarded 1 point.
-- If a[i] < b[i], then Bob is awarded 1 point.
-- If a[i] == b[i], then neither person receives a point.
+  return res.json({ success: true, logEntry });
+});
 
-Return an array containing [AlicePoints, BobPoints].`,
-      constraints: ['1 <= a[i] <= 100', '1 <= b[i] <= 100'],
-      examples: [
-        { input: 'a = [5, 6, 7], b = [3, 6, 10]', output: '[1, 1]', explanation: 'Alice gets 1 point for first category, Bob gets 1 point for third category.' },
-      ],
-      functionName: 'compareTriplets',
-      starterCode: {
-        javascript: `function compareTriplets(a, b) {
-  let alice = 0, bob = 0;
-  for (let i = 0; i < 3; i++) {
-    if (a[i] > b[i]) alice++;
-    else if (a[i] < b[i]) bob++;
-  }
-  return [alice, bob];
-}`,
-        python: `def compareTriplets(a, b):
-    alice = sum(1 for x, y in zip(a, b) if x > y)
-    bob = sum(1 for x, y in zip(a, b) if x < y)
-    return [alice, bob]`,
-        cpp: `vector<int> compareTriplets(vector<int> a, vector<int> b) {
-    int alice = 0, bob = 0;
-    for (int i = 0; i < 3; ++i) {
-        if (a[i] > b[i]) alice++;
-        else if (a[i] < b[i]) bob++;
-    }
-    return {alice, bob};
-}`,
-        java: `class Solution {
-    public static List<Integer> compareTriplets(List<Integer> a, List<Integer> b) {
-        int alice = 0, bob = 0;
-        for (int i = 0; i < 3; i++) {
-            if (a.get(i) > b.get(i)) alice++;
-            else if (a.get(i) < b.get(i)) bob++;
-        }
-        return Arrays.asList(alice, bob);
-    }
-}`,
-      },
-      testCases: [
-        { id: 'tc_1', input: [[5, 6, 7], [3, 6, 10]], inputFormatted: 'a = [5, 6, 7], b = [3, 6, 10]', expectedOutput: [1, 1], expectedOutputFormatted: '[1, 1]' },
-        { id: 'tc_2', input: [[17, 28, 30], [99, 16, 8]], inputFormatted: 'a = [17, 28, 30], b = [99, 16, 8]', expectedOutput: [2, 1], expectedOutputFormatted: '[2, 1]' },
-      ],
-      sourceUrl: 'https://www.hackerrank.com/challenges/compare-the-triplets',
-    },
-    {
-      id: 'cf_50a',
-      title: 'Domino Piling',
-      platform: 'codeforces',
-      platformProblemNumber: '50A',
-      difficulty: 'easy',
-      xpReward: 10,
-      category: 'Math & Greedy',
-      tags: ['Math', 'Greedy'],
-      description: `You are given a rectangular board of \`M x N\` squares. Also you are given an unlimited number of standard domino pieces of \`2 x 1\` squares.
+// 9. Tab Switch / Unfocused Auto-Submit Endpoint
+const autoSubmittedQuizStore: Record<string, any> = {};
+app.post('/api/quiz/auto-submit', async (req: Request, res: Response) => {
+  const { studentId, studentName, campus, section, quizId, quizTitle, score, totalQuestions, reason = 'tab_switch', switchCount = 1, answers = [] } = req.body;
 
-You are allowed to rotate the pieces. You are asked to place as many dominoes as possible on the board so as to satisfy the following conditions:
-1. Each domino completely covers two squares.
-2. No two dominoes overlap.
-3. Each domino lies entirely inside the board. It is allowed to touch the edges of the board.
+  const recordId = `${quizId}_${studentId}`;
+  const record = {
+    id: recordId,
+    studentId,
+    studentName,
+    campus,
+    section,
+    quizId,
+    quizTitle,
+    submittedAt: new Date().toISOString(),
+    reason,
+    switchCount,
+    score,
+    totalQuestions,
+    answers,
+    locked: true,
+  };
 
-Find the maximum number of dominoes, which can be placed under these restrictions.`,
-      constraints: ['1 <= M <= N <= 16'],
-      examples: [
-        { input: 'm = 2, n = 4', output: '4', explanation: '2x4 board has 8 squares, fits 8 / 2 = 4 dominoes.' },
-        { input: 'm = 3, n = 3', output: '4', explanation: '3x3 board has 9 squares, fits floor(9 / 2) = 4 dominoes.' },
-      ],
-      functionName: 'dominoPiling',
-      starterCode: {
-        javascript: `function dominoPiling(m, n) {
-  return Math.floor((m * n) / 2);
-}`,
-        python: `def dominoPiling(m, n):
-    return (m * n) // 2`,
-        cpp: `int dominoPiling(int m, int n) {
-    return (m * n) / 2;
-}`,
-        java: `class Solution {
-    public static int dominoPiling(int m, int n) {
-        return (m * n) / 2;
-    }
-}`,
-      },
-      testCases: [
-        { id: 'tc_1', input: [2, 4], inputFormatted: 'm = 2, n = 4', expectedOutput: 4, expectedOutputFormatted: '4' },
-        { id: 'tc_2', input: [3, 3], inputFormatted: 'm = 3, n = 3', expectedOutput: 4, expectedOutputFormatted: '4' },
-        { id: 'tc_3', input: [1, 5], inputFormatted: 'm = 1, n = 5', expectedOutput: 2, expectedOutputFormatted: '2' },
-      ],
-      sourceUrl: 'https://codeforces.com/problemset/problem/50/A',
-    },
-    {
-      id: 'cf_158a',
-      title: 'Next Round',
-      platform: 'codeforces',
-      platformProblemNumber: '158A',
-      difficulty: 'easy',
-      xpReward: 10,
-      category: 'Arrays & Logic',
-      tags: ['Implementation'],
-      description: `"Contestant who earns a score equal to or greater than the k-th place finisher's score will advance to the next round, as long as the contestant earns a positive score..." - an excerpt from contest rules.
+  autoSubmittedQuizStore[recordId] = record;
+  console.log(`[Auto-Submit Triggered] Quiz "${quizTitle}" auto-submitted for ${studentName} due to ${reason} (${switchCount} switches).`);
 
-A total of \`n\` participants took part in the contest (\`n >= k\`), and you already know their scores. Calculate how many participants will advance to the next round.`,
-      constraints: ['1 <= k <= n <= 50', 'scores are sorted in non-increasing order'],
-      examples: [
-        { input: 'n = 8, k = 5, scores = [10, 9, 8, 7, 7, 7, 5, 5]', output: '6', explanation: 'The 5th participant scored 7. 6 participants scored >= 7.' },
-      ],
-      functionName: 'nextRound',
-      starterCode: {
-        javascript: `function nextRound(n, k, scores) {
-  const cutoff = scores[k - 1];
-  let advancers = 0;
-  for (let i = 0; i < n; i++) {
-    if (scores[i] >= cutoff && scores[i] > 0) {
-      advancers++;
-    }
-  }
-  return advancers;
-}`,
-        python: `def nextRound(n, k, scores):
-    cutoff = scores[k - 1]
-    return sum(1 for s in scores if s >= cutoff and s > 0)`,
-        cpp: `int nextRound(int n, int k, vector<int>& scores) {
-    int cutoff = scores[k - 1];
-    int count = 0;
-    for (int s : scores) {
-        if (s >= cutoff && s > 0) count++;
-    }
-    return count;
-}`,
-        java: `class Solution {
-    public static int nextRound(int n, int k, int[] scores) {
-        int cutoff = scores[k - 1];
-        int count = 0;
-        for (int s : scores) {
-            if (s >= cutoff && s > 0) count++;
-        }
-        return count;
-    }
-}`,
-      },
-      testCases: [
-        { id: 'tc_1', input: [8, 5, [10, 9, 8, 7, 7, 7, 5, 5]], inputFormatted: 'n=8, k=5, scores=[10,9,8,7,7,7,5,5]', expectedOutput: 6, expectedOutputFormatted: '6' },
-        { id: 'tc_2', input: [4, 2, [0, 0, 0, 0]], inputFormatted: 'n=4, k=2, scores=[0,0,0,0]', expectedOutput: 0, expectedOutputFormatted: '0' },
-      ],
-      sourceUrl: 'https://codeforces.com/problemset/problem/158/A',
-    },
-    {
-      id: 'lc_322',
-      title: 'Coin Change',
-      platform: 'leetcode',
-      platformProblemNumber: '322',
-      difficulty: 'medium',
-      xpReward: 20,
-      category: 'Dynamic Programming',
-      tags: ['Array', 'Dynamic Programming', 'Breadth-First Search'],
-      description: `You are given an integer array \`coins\` representing coins of different denominations and an integer \`amount\` representing a total amount of money.
-
-Return the fewest number of coins that you need to make up that amount. If that amount of money cannot be made up by any combination of the coins, return \`-1\`.
-
-You may assume that you have an infinite number of each kind of coin.`,
-      constraints: ['1 <= coins.length <= 12', '1 <= coins[i] <= 2^31 - 1', '0 <= amount <= 10^4'],
-      examples: [
-        { input: 'coins = [1, 2, 5], amount = 11', output: '3', explanation: '11 = 5 + 5 + 1 (3 coins total).' },
-        { input: 'coins = [2], amount = 3', output: '-1', explanation: 'Amount 3 cannot be made with only coin 2.' },
-      ],
-      functionName: 'coinChange',
-      starterCode: {
-        javascript: `function coinChange(coins, amount) {
-  const dp = new Array(amount + 1).fill(Infinity);
-  dp[0] = 0;
-  for (let i = 1; i <= amount; i++) {
-    for (const coin of coins) {
-      if (i - coin >= 0) {
-        dp[i] = Math.min(dp[i], dp[i - coin] + 1);
-      }
-    }
-  }
-  return dp[amount] === Infinity ? -1 : dp[amount];
-}`,
-        python: `def coinChange(coins, amount):
-    dp = [float('inf')] * (amount + 1)
-    dp[0] = 0
-    for i in range(1, amount + 1):
-        for coin in coins:
-            if i - coin >= 0:
-                dp[i] = min(dp[i], dp[i - coin] + 1)
-    return dp[amount] if dp[amount] != float('inf') else -1`,
-        cpp: `int coinChange(vector<int>& coins, int amount) {
-    vector<int> dp(amount + 1, amount + 1);
-    dp[0] = 0;
-    for (int i = 1; i <= amount; ++i) {
-        for (int c : coins) {
-            if (i >= c) dp[i] = min(dp[i], dp[i - c] + 1);
-        }
-    }
-    return dp[amount] > amount ? -1 : dp[amount];
-}`,
-        java: `class Solution {
-    public int coinChange(int[] coins, int amount) {
-        int[] dp = new int[amount + 1];
-        Arrays.fill(dp, amount + 1);
-        dp[0] = 0;
-        for (int i = 1; i <= amount; i++) {
-            for (int coin : coins) {
-                if (i >= coin) dp[i] = Math.min(dp[i], dp[i - coin] + 1);
-            }
-        }
-        return dp[amount] > amount ? -1 : dp[amount];
-    }
-}`,
-      },
-      testCases: [
-        { id: 'tc_1', input: [[1, 2, 5], 11], inputFormatted: 'coins = [1, 2, 5], amount = 11', expectedOutput: 3, expectedOutputFormatted: '3' },
-        { id: 'tc_2', input: [[2], 3], inputFormatted: 'coins = [2], amount = 3', expectedOutput: -1, expectedOutputFormatted: '-1' },
-        { id: 'tc_3', input: [[1], 0], inputFormatted: 'coins = [1], amount = 0', expectedOutput: 0, expectedOutputFormatted: '0' },
-      ],
-      sourceUrl: 'https://leetcode.com/problems/coin-change/',
-    },
-  ];
-
-  // Try matching query against catalog
-  const found = catalog.find(
-    (item) =>
-      item.title.toLowerCase().includes(qLower) ||
-      item.id.toLowerCase().includes(qLower) ||
-      item.category.toLowerCase().includes(qLower) ||
-      item.tags.some((t: string) => t.toLowerCase().includes(qLower))
-  );
-
-  const matchedProblem = found || catalog[0];
+  // Notify teachers
+  await dispatchNotification({
+    id: `notif_as_${Date.now()}`,
+    title: `Quiz Auto-Submitted (Tab Switch): ${studentName}`,
+    message: `${studentName} switched tabs during ${quizTitle || 'Weekly Quiz'} and was automatically submitted (Score: ${score}/${totalQuestions}).`,
+    type: 'quiz',
+    category: 'academic',
+    timestamp: new Date().toISOString(),
+    read: false,
+    targetRole: 'faculty',
+    targetCampus: campus,
+  });
 
   return res.json({
     success: true,
-    problem: matchedProblem,
-    searchQueries: [
-      `site:${matchedProblem.platform === 'leetcode' ? 'leetcode.com' : matchedProblem.platform === 'hackerrank' ? 'hackerrank.com' : 'codeforces.com'} ${query}`,
-      `google search official competitive programming problem "${query}"`,
-    ],
-    sources: [matchedProblem.sourceUrl],
-    isGrounded: false,
-    fallback: true,
+    message: 'Quiz was auto-submitted due to tab switch violation and locked on the server.',
+    record,
   });
+});
+
+// 10. Teacher / Admin Retake Grant
+app.post('/api/quiz/grant-retake', async (req: Request, res: Response) => {
+  const { quizId, studentId, reason, grantedByName } = req.body;
+  const recordId = `${quizId}_${studentId}`;
+
+  if (autoSubmittedQuizStore[recordId]) {
+    autoSubmittedQuizStore[recordId].locked = false;
+    autoSubmittedQuizStore[recordId].retakeGranted = true;
+    autoSubmittedQuizStore[recordId].retakeReason = reason;
+    autoSubmittedQuizStore[recordId].grantedByName = grantedByName;
+  }
+
+  // Notify student
+  await dispatchNotification({
+    id: `notif_retake_${Date.now()}`,
+    userId: studentId,
+    title: `Quiz Retake Granted`,
+    message: `Prof. ${grantedByName} has granted you a retake for your quiz. Reason: ${reason}`,
+    type: 'quiz',
+    category: 'academic',
+    timestamp: new Date().toISOString(),
+    read: false,
+  });
+
+  return res.json({
+    success: true,
+    message: `Retake granted for student ${studentId}.`,
+  });
+});
+
+// 11. Notifications Gateway & Web Push Keys
+app.get('/api/notifications/vapid-public-key', (_req: Request, res: Response) => {
+  return res.json({ publicKey: getVapidPublicKey() });
+});
+
+app.post('/api/notifications/push-subscribe', (req: Request, res: Response) => {
+  const { userId, subscription } = req.body;
+  if (!userId || !subscription) {
+    return res.status(400).json({ error: 'Missing userId or subscription payload' });
+  }
+  savePushSubscription(userId, subscription);
+  return res.json({ success: true, message: 'Push subscription registered.' });
+});
+
+app.post('/api/notifications/dispatch', async (req: Request, res: Response) => {
+  const notif = req.body;
+  if (!notif.title || !notif.message) {
+    return res.status(400).json({ error: 'Title and message required.' });
+  }
+
+  await dispatchNotification({
+    id: notif.id || `notif_${Date.now()}`,
+    userId: notif.userId,
+    title: notif.title,
+    message: notif.message,
+    type: notif.type || 'assignment',
+    category: notif.category || 'academic',
+    timestamp: new Date().toISOString(),
+    read: false,
+    link: notif.link,
+    targetCampus: notif.targetCampus,
+    targetYear: notif.targetYear,
+    targetSection: notif.targetSection,
+    targetRole: notif.targetRole,
+  });
+
+  return res.json({ success: true, message: 'Notification dispatched.' });
 });
 
 // In-memory accept tracking to detect repeated collusion patterns
@@ -946,6 +738,8 @@ app.put('/api/faculty/:id/profile', (req: Request, res: Response) => {
 // Vite or Static Serving
 async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';
+  const server = http.createServer(app);
+  initWebSocketServer(server);
 
   if (!isProduction) {
     const { createServer } = await import('vite');
@@ -961,7 +755,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`MiraiQuest server listening on http://localhost:${PORT}`);
   });
 }

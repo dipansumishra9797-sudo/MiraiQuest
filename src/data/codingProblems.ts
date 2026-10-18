@@ -1,6 +1,94 @@
 export type Platform = 'leetcode' | 'hackerrank' | 'codeforces';
 export type Difficulty = 'easy' | 'medium' | 'hard';
-export type SupportedLanguage = 'javascript' | 'python' | 'cpp' | 'java';
+export type SupportedLanguage = 'javascript' | 'python' | 'c' | 'cpp' | 'java';
+
+export function getCppStarterTemplate(title?: string, functionName?: string): string {
+  const fn = functionName || 'solution';
+  return `#include <bits/stdc++.h>
+using namespace std;
+
+// Problem: ${title || 'Competitive Programming Challenge'}
+// Function / Class scaffold:
+class Solution {
+public:
+    void ${fn}() {
+        // TODO: Implement core algorithmic logic
+    }
+};
+
+int main() {
+    // Fast I/O scaffolding for C++17
+    ios_base::sync_with_stdio(false);
+    cin.tie(NULL);
+
+    Solution solver;
+    // Read input and invoke solver
+    // Example: solver.${fn}();
+
+    return 0;
+}`;
+}
+
+export function getCStarterTemplate(title?: string, functionName?: string): string {
+  const fn = functionName || 'solution';
+  return `#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+
+// Problem: ${title || 'Competitive Programming Challenge'}
+void ${fn}() {
+    // TODO: Implement solution in C11
+}
+
+int main() {
+    ${fn}();
+    return 0;
+}`;
+}
+
+export function getJavaStarterTemplate(title?: string, functionName?: string): string {
+  const fn = functionName || 'solution';
+  return `import java.util.*;
+import java.io.*;
+
+public class Solution {
+    public static void ${fn}() {
+        // TODO: Implement solution logic
+    }
+
+    public static void main(String[] args) throws IOException {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        ${fn}();
+    }
+}`;
+}
+
+export function getLanguageStarter(
+  problem: Partial<CodingProblem>,
+  lang: SupportedLanguage
+): string {
+  if (problem?.starterCode && problem.starterCode[lang]) {
+    const existing = problem.starterCode[lang];
+    if (existing && existing.trim().length > 0 && !existing.includes('// C++ Starter\n// Implement solution')) {
+      return existing;
+    }
+  }
+
+  if (lang === 'cpp') {
+    return getCppStarterTemplate(problem?.title, problem?.functionName);
+  }
+  if (lang === 'c') {
+    return getCStarterTemplate(problem?.title, problem?.functionName);
+  }
+  if (lang === 'java') {
+    return getJavaStarterTemplate(problem?.title, problem?.functionName);
+  }
+  if (lang === 'python') {
+    return problem?.starterCode?.python || `def ${problem?.functionName || 'solution'}(*args):\n    # TODO: Implement solution\n    pass`;
+  }
+  return problem?.starterCode?.javascript || `function ${problem?.functionName || 'solution'}(...args) {\n  // TODO: Implement solution\n}`;
+}
 
 export interface TestCase {
   id: string;
@@ -28,7 +116,7 @@ export interface CodingProblem {
     output: string;
     explanation?: string;
   }[];
-  starterCode: Record<SupportedLanguage, string>;
+  starterCode: Partial<Record<SupportedLanguage, string>> & { javascript: string; python: string };
   functionName: string;
   testCases: TestCase[];
   hints?: string[];

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../../store/appStore';
 import { CODING_TOPICS, TopicMetadata } from '../../data/codingPracticeCatalog';
 import { runProblemCode, RunSummary } from '../../modules/codeRunner';
-import { SupportedLanguage } from '../../data/codingProblems';
+import { SupportedLanguage, getLanguageStarter } from '../../data/codingProblems';
 import {
   Code,
   CheckCircle2,
@@ -66,6 +66,8 @@ export const CodingPracticeView: React.FC = () => {
     generateAiTopicQuestions,
     ledger,
     isDark,
+    studentDrafts,
+    saveStudentDraft,
   } = useApp();
 
   const solvedIds = useMemo(() => {
@@ -94,15 +96,16 @@ export const CodingPracticeView: React.FC = () => {
     return allCodingProblems.find((p) => p.id === activeProblemId) || allCodingProblems[0];
   }, [allCodingProblems, activeProblemId]);
 
-  // Sync starter code when active problem or language changes
+  // Sync starter code or student draft when active problem or language changes
   React.useEffect(() => {
-    if (activeProblem?.starterCode) {
-      setUserCode(activeProblem.starterCode[selectedLanguage] || '');
+    if (activeProblem) {
+      const saved = studentDrafts?.[activeProblem.id]?.[selectedLanguage];
+      setUserCode(saved || getLanguageStarter(activeProblem, selectedLanguage));
       setRunSummary(null);
       setActiveTestTab(0);
       setShowHints(false);
     }
-  }, [activeProblemId, selectedLanguage]);
+  }, [activeProblemId, selectedLanguage, activeProblem]);
 
   // Daily solves count
   const today = new Date().toISOString().split('T')[0];
@@ -651,21 +654,27 @@ export const CodingPracticeView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Language Switcher */}
-              <div className="flex items-center gap-1 rounded-lg border p-0.5 text-xs font-semibold shrink-0">
-                {(['javascript', 'python'] as SupportedLanguage[]).map((lang) => (
+              {/* Language Switcher: JS, Python, C, C++17, Java */}
+              <div className="flex items-center gap-1 rounded-lg border p-0.5 text-xs font-semibold shrink-0 flex-wrap">
+                {[
+                  { id: 'javascript', label: 'JS' },
+                  { id: 'python', label: 'Python' },
+                  { id: 'c', label: 'C' },
+                  { id: 'cpp', label: 'C++17' },
+                  { id: 'java', label: 'Java' },
+                ].map((item) => (
                   <button
-                    key={lang}
-                    onClick={() => setSelectedLanguage(lang)}
-                    className={`px-2.5 py-1 rounded capitalize transition-colors cursor-pointer ${
-                      selectedLanguage === lang
-                        ? 'bg-indigo-600 text-white font-bold'
+                    key={item.id}
+                    onClick={() => setSelectedLanguage(item.id as SupportedLanguage)}
+                    className={`px-2 py-1 rounded transition-colors cursor-pointer text-xs font-semibold ${
+                      selectedLanguage === item.id
+                        ? 'bg-indigo-600 text-white font-bold shadow-xs'
                         : isDark
                         ? 'text-slate-400 hover:text-white'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    {lang === 'javascript' ? 'JS' : 'Python'}
+                    {item.label}
                   </button>
                 ))}
               </div>

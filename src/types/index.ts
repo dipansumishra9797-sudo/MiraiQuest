@@ -307,13 +307,72 @@ export interface PeerHelpPost {
 
 export interface AppNotification {
   id: string;
-  userId: string;
+  userId?: string;
   title: string;
   message: string;
-  type: 'peer_accept' | 'streak' | 'assignment' | 'nudge';
+  type:
+    | 'peer_accept'
+    | 'streak'
+    | 'assignment'
+    | 'nudge'
+    | 'quiz'
+    | 'battle'
+    | 'league'
+    | 'badge'
+    | 'xp'
+    | 'reward'
+    | 'doubt'
+    | 'anti_cheat'
+    | 'approval';
+  category?: 'academic' | 'battles' | 'doubts' | 'gamification' | 'audit';
   timestamp: string;
   read: boolean;
   link?: string;
+  targetCampus?: Campus | 'all';
+  targetYear?: AcademicYear | 'all';
+  targetSection?: string | 'all';
+  targetRole?: UserRole | 'all';
+}
+
+export interface NotificationPreferences {
+  academic: boolean;
+  battles: boolean;
+  doubts: boolean;
+  gamification: boolean;
+  pushEnabled: boolean;
+  quietHoursEnabled: boolean;
+  quietHoursStart: string; // e.g. "22:00"
+  quietHoursEnd: string; // e.g. "07:00"
+}
+
+export interface AntiCheatLog {
+  id: string;
+  studentId: string;
+  studentName: string;
+  campus: Campus;
+  section: string;
+  eventType: 'screenshot_blocked' | 'tab_switch' | 'fullscreen_exit' | 'devtools_opened' | 'context_menu';
+  quizId?: string;
+  quizTitle?: string;
+  timestamp: string;
+  details: string;
+  severity: 'low' | 'medium' | 'high';
+}
+
+export interface AutoSubmittedQuiz {
+  id: string;
+  studentId: string;
+  quizId: string;
+  quizTitle: string;
+  submittedAt: string;
+  switchCount: number;
+  reason: string;
+  score: number;
+  totalQuestions: number;
+  locked: boolean;
+  retakeGranted?: boolean;
+  retakeGrantedBy?: string;
+  retakeReason?: string;
 }
 
 export interface RewardItem {
@@ -356,21 +415,40 @@ export interface AuditFlag {
 
 export type ThemeMode = 'light' | 'dark';
 
+export interface AssignmentMcqItem {
+  id: string;
+  questionText: string;
+  options: string[];
+  correctOptionIndex: number;
+  explanation: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  topic: string;
+}
+
 export interface Assignment {
   id: string;
   title: string;
   subject: string;
+  topic?: string;
   campus: Campus | 'All Campuses';
   section: string; // e.g. "All Sections", "CS-A", "CS-B"
+  targetCampuses?: Campus[]; // Multi-select support for targeting
+  targetYears?: AcademicYear[]; // Multi-select support for targeting
+  targetSections?: string[]; // Multi-select support for targeting
   dueDate: string; // YYYY-MM-DD
   dueTime: string; // HH:mm
   pointsXp: number;
   description: string;
   instructions: string[];
-  type: 'coding' | 'lab_report' | 'homework';
+  type: 'coding' | 'lab_report' | 'homework' | 'mcq';
+  timeLimitMinutes?: number;
+  mcqs?: AssignmentMcqItem[];
+  originalPdfName?: string;
+  originalPdfText?: string;
   platformLink?: string; // e.g. LeetCode / HackerRank / Codeforces URL or Problem ID
   problemId?: string; // Linked coding problem id if type === 'coding'
   starterCode?: string;
+  starterCodes?: Record<string, string>;
   language?: string;
   attachments?: { name: string; size: string; type: string }[];
   createdByName: string;
@@ -386,7 +464,7 @@ export interface AssignmentSubmission {
   campus: Campus;
   section: string;
   submittedAt: string;
-  status: 'submitted' | 'graded' | 'late';
+  status: 'submitted' | 'graded' | 'late' | 'auto_submitted';
   grade?: number; // XP points awarded
   maxPoints: number;
   feedback?: string;
@@ -395,5 +473,12 @@ export interface AssignmentSubmission {
   fileName?: string;
   gradedBy?: string;
   gradedAt?: string;
+  mcqScore?: number;
+  mcqTotal?: number;
+  mcqAnswers?: Record<string, number>;
+  isAutoSubmitted?: boolean;
+  autoSubmitReason?: string;
+  switchCount?: number;
 }
+
 

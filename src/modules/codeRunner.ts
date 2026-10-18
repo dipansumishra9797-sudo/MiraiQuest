@@ -142,67 +142,79 @@ export async function runProblemCode(
 
   compilerLogs.push(`[Compiling ${language.toUpperCase()}] Validating syntax tree and environment...`);
 
-  // Handle compiled languages simulation (C++, Java)
-  if (language === 'cpp' || language === 'java') {
-    compilerLogs.push(`[Virtual Native Sandbox] Emulating GCC 13.2 / OpenJDK 21 test runner...`);
-    // Basic syntax check for C++ / Java
-    const hasFunction = userCode.includes(problem.functionName);
-    const hasReturn = userCode.includes('return');
-
-    if (!hasFunction) {
-      return {
-        allPassed: false,
-        totalPassed: 0,
-        totalTests: testCasesToRun.length,
-        results: [],
-        overallTimeMs: 12,
-        memoryMb: 36.4,
-        compilerLogs,
-        errorMessage: `Compilation Error: Target method or function '${problem.functionName}' was not found in solution.`,
-      };
-    }
-
-    if (!hasReturn) {
-      return {
-        allPassed: false,
-        totalPassed: 0,
-        totalTests: testCasesToRun.length,
-        results: [],
-        overallTimeMs: 14,
-        memoryMb: 38.1,
-        compilerLogs,
-        errorMessage: `Compilation Error: Non-void function '${problem.functionName}' must return a value.`,
-      };
-    }
-
-    // Run test cases against expected logic simulation
-    for (const tc of testCasesToRun) {
-      const tcStart = performance.now();
-      const mockTime = Math.max(4, Math.floor(Math.random() * 15) + 6);
-      results.push({
-        testCaseId: tc.id,
-        passed: true,
-        inputFormatted: tc.inputFormatted,
-        expectedOutput: tc.expectedOutput,
-        expectedOutputFormatted: tc.expectedOutputFormatted,
-        actualOutput: tc.expectedOutput,
-        actualOutputFormatted: tc.expectedOutputFormatted,
-        executionTimeMs: mockTime,
-        stdout: [`[JVM/G++] Executed in ${mockTime}ms with exit code 0`],
-        isHidden: tc.isHidden,
+  // Handle C++, C, and Java via backend execution service (/api/run)
+  if (language === 'cpp' || language === 'c' || language === 'java') {
+    compilerLogs.push(`[Backend Compiler /api/run] Dispatching ${language.toUpperCase()} to execution service (Judge0/Piston/GCC)...`);
+    try {
+      const response = await fetch('/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          language,
+          code: userCode,
+          problem: {
+            id: problem.id,
+            title: problem.title,
+            functionName: problem.functionName,
+            testCases: testCasesToRun,
+          },
+          onlyVisibleCases,
+        }),
       });
-    }
 
-    const overallTime = Math.round(performance.now() - startTime);
-    return {
-      allPassed: true,
-      totalPassed: results.length,
-      totalTests: results.length,
-      results,
-      overallTimeMs: overallTime,
-      memoryMb: +(Math.random() * 5 + 38).toFixed(1),
-      compilerLogs: [...compilerLogs, `[Build Succeeded] All test cases passed with exit code 0.`],
-    };
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error || `Server responded with status ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.compileError) {
+        return {
+          allPassed: false,
+          totalPassed: 0,
+          totalTests: testCasesToRun.length,
+          results: [],
+          overallTimeMs: data.overallTimeMs || 15,
+          memoryMb: data.memoryMb || 28.5,
+          compilerLogs: [
+            ...compilerLogs,
+            `[Build Failed] Compilation errors detected. See error output below with line numbers.`,
+            ...(data.compilerLogs || []),
+          ],
+          errorMessage: data.compileError,
+        };
+      }
+
+      return {
+        allPassed: Boolean(data.allPassed),
+        totalPassed: data.totalPassed ?? (data.results?.filter((r: any) => r.passed).length || 0),
+        totalTests: data.totalTests ?? testCasesToRun.length,
+        results: data.results || [],
+        overallTimeMs: data.overallTimeMs || Math.round(performance.now() - startTime),
+        memoryMb: data.memoryMb || 34.2,
+        compilerLogs: [
+          ...compilerLogs,
+          ...(data.compilerLogs || [`[Build Succeeded] ${language.toUpperCase()} execution finished.`]),
+        ],
+        errorMessage: data.errorMessage,
+      };
+    } catch (netErr: any) {
+      console.warn('Backend compiler service failed or unreachable:', netErr);
+      return {
+        allPassed: false,
+        totalPassed: 0,
+        totalTests: testCasesToRun.length,
+        results: [],
+        overallTimeMs: 0,
+        memoryMb: 0,
+        compilerLogs: [
+          ...compilerLogs,
+          `[Execution Service Unreachable] Could not connect to /api/run: ${netErr?.message || netErr}`,
+        ],
+        errorMessage: `Execution Service Unreachable: ${language.toUpperCase()} execution requires the backend compiler service (/api/run). Browser execution fallback only exists for Python and JavaScript. Please check backend connectivity or .env PISTON_URL / JUDGE0_URL configuration.`,
+      };
+    }
   }
 
   // Handle JavaScript and Python
