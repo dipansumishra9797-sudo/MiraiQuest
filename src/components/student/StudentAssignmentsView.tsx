@@ -306,15 +306,15 @@ export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
 
       {/* Submission Modal */}
       {selectedAsgnToSubmit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
           <div
-            className={`w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl border shadow-2xl overflow-hidden transition-colors ${
+            className={`w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-2xl border shadow-2xl overflow-hidden pb-safe sm:pb-0 transition-colors ${
               isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-2xl'
             }`}
           >
             {/* Modal Header */}
             <div
-              className={`p-5 border-b flex items-center justify-between shrink-0 ${
+              className={`p-4 sm:p-5 border-b flex items-center justify-between shrink-0 ${
                 isDark ? 'border-slate-800 bg-slate-950/60' : 'border-slate-200 bg-slate-50/70'
               }`}
             >
@@ -329,7 +329,7 @@ export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
 
               <button
                 onClick={() => setSelectedAsgnToSubmit(null)}
-                className={`p-2 rounded-lg transition-colors ${
+                className={`p-2 rounded-lg touch-target flex items-center justify-center transition-colors ${
                   isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
@@ -338,7 +338,7 @@ export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleSubmitSolution} className="flex-1 overflow-y-auto p-5 space-y-4">
+            <form onSubmit={handleSubmitSolution} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
               <div>
                 <div className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                   {selectedAsgnToSubmit.description}
@@ -351,7 +351,7 @@ export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
                 </label>
                 <textarea
                   required
-                  rows={9}
+                  rows={8}
                   value={submissionCodeOrText}
                   onChange={(e) => setSubmissionCodeOrText(e.target.value)}
                   placeholder={
@@ -373,17 +373,17 @@ export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>On-time LMS timestamp check active. Points will be credited upon submission.</span>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="text-[11px] sm:text-xs">On-time LMS timestamp check active. Points credited upon submission.</span>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-2">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setSelectedAsgnToSubmit(null)}
-                  className={`px-4 py-2 rounded-xl text-xs font-medium ${
+                  className={`px-4 py-2.5 rounded-xl text-xs font-medium text-center ${
                     isDark ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -393,7 +393,7 @@ export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
                 <button
                   type="submit"
                   disabled={isSubmitting || !submissionCodeOrText.trim()}
-                  className="flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+                  className="flex items-center justify-center gap-1.5 px-6 py-3 sm:py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all cursor-pointer touch-target"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Submit Solution & Claim XP</span>

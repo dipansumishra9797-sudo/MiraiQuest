@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { AppProvider, useApp } from './store/appStore';
 import { Header } from './components/Header';
 import { LevelAscensionModal } from './components/LevelAscensionModal';
@@ -9,6 +10,7 @@ import { FacultyDashboard } from './components/faculty/FacultyDashboard';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { DailyQuizModal } from './components/student/DailyQuizModal';
 import { UserProfileModal } from './components/profile/UserProfileModal';
+import { BottomNavBar } from './components/BottomNavBar';
 
 const AppContent: React.FC = () => {
   const { role, isDark, navSection, setNavSection } = useApp();
@@ -35,9 +37,11 @@ const AppContent: React.FC = () => {
   const isAdminLeagues = role === 'admin' && navSection === 'admin:leagues';
   const isAdminBattles = role === 'admin' && navSection === 'admin:battles';
 
+  const activeViewKey = `${role}-${navSection}-${currentTab}`;
+
   return (
     <div
-      className={`min-h-screen flex flex-col font-sans transition-colors duration-200 selection:bg-indigo-500 selection:text-white ${
+      className={`min-h-screen min-h-[100dvh] flex flex-col font-sans transition-colors duration-200 selection:bg-indigo-500 selection:text-white ${
         isDark ? 'bg-slate-950 text-slate-100' : 'bg-[#F6F7FB] text-slate-900'
       }`}
     >
@@ -49,33 +53,46 @@ const AppContent: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {/* Faculty Perspective */}
-        {role === 'faculty' && (
-          isFacultyBattles ? <TeamBattlesView /> : <FacultyDashboard />
-        )}
+      <main className={`flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-8 ${
+        role === 'student' ? 'pb-24 sm:pb-8' : 'pb-8'
+      }`}>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeViewKey}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="w-full"
+          >
+            {/* Faculty Perspective */}
+            {role === 'faculty' && (
+              isFacultyBattles ? <TeamBattlesView /> : <FacultyDashboard />
+            )}
 
-        {/* Admin Perspective */}
-        {role === 'admin' && (
-          isAdminLeagues ? (
-            <LeaguesLeaderboard />
-          ) : isAdminBattles ? (
-            <TeamBattlesView />
-          ) : (
-            <AdminDashboard />
-          )
-        )}
+            {/* Admin Perspective */}
+            {role === 'admin' && (
+              isAdminLeagues ? (
+                <LeaguesLeaderboard />
+              ) : isAdminBattles ? (
+                <TeamBattlesView />
+              ) : (
+                <AdminDashboard />
+              )
+            )}
 
-        {/* Student Perspective */}
-        {role === 'student' && (
-          isStudentLeagues ? (
-            <LeaguesLeaderboard />
-          ) : isStudentBattles ? (
-            <TeamBattlesView />
-          ) : (
-            <StudentDashboard />
-          )
-        )}
+            {/* Student Perspective */}
+            {role === 'student' && (
+              isStudentLeagues ? (
+                <LeaguesLeaderboard />
+              ) : isStudentBattles ? (
+                <TeamBattlesView />
+              ) : (
+                <StudentDashboard />
+              )
+            )}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       {/* Global Modals */}
@@ -89,9 +106,18 @@ const AppContent: React.FC = () => {
         </>
       )}
 
+      {/* Student Mobile Bottom Navigation Bar */}
+      <BottomNavBar
+        currentTab={currentTab}
+        onTabChange={handleTabChange}
+        onOpenQuizModal={() => setShowDirectQuiz(true)}
+      />
+
       {/* Footer */}
       <footer
-        className={`border-t text-xs py-6 mt-12 transition-colors ${
+        className={`border-t text-xs py-6 transition-colors ${
+          role === 'student' ? 'mb-16 sm:mb-0' : ''
+        } ${
           isDark
             ? 'border-slate-900 bg-slate-950 text-slate-500'
             : 'border-slate-200 bg-white text-slate-600 shadow-xs'

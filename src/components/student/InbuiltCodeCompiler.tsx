@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import {
   CodingProblem,
@@ -7,11 +7,17 @@ import {
   SupportedLanguage,
   getLanguageStarter,
 } from '../../data/codingProblems';
-import { runProblemCode, RunSummary } from '../../modules/codeRunner';
+import {
+  runProblemCode,
+  runDirectCode,
+  RunSummary,
+  TestExecutionResult,
+} from '../../modules/codeRunner';
 import { useApp } from '../../store/appStore';
 import { GoogleSearchCodingModal } from './GoogleSearchCodingModal';
 import {
   Play,
+  Send,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -28,117 +34,308 @@ import {
   Flame,
   Award,
   Search,
-  Globe,
+  Maximize2,
+  Minimize2,
+  ZoomIn,
+  ZoomOut,
+  Clock,
+  Cpu,
+  Layers,
+  ChevronDown,
+  ChevronUp,
+  FileCode,
+  AlertCircle,
+  HelpCircle,
+  BookOpen,
 } from 'lucide-react';
 
 export const InbuiltCodeCompiler: React.FC = () => {
-  const { activeStudent, triggerXpEvent, allCodingProblems, isDark, studentDrafts, saveStudentDraft } = useApp();
+  const {
+    activeStudent,
+    triggerXpEvent,
+    allCodingProblems,
+    isDark,
+    studentDrafts,
+    saveStudentDraft,
+  } = useApp();
 
   const [showSearchModal, setShowSearchModal] = useState<boolean>(false);
 
   // Filter states
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'all'>('all');
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty | 'all'>('all');
-  const [selectedProblemId, setSelectedProblemId] = useState<string>(allCodingProblems[0]?.id || 'lc_1');
+  const [selectedProblemId, setSelectedProblemId] = useState<string>(
+    allCodingProblems[0]?.id || 'lc_1'
+  );
 
-  // Active problem & editor state
+  // Active problem
   const activeProblem =
     allCodingProblems.find((p) => p.id === selectedProblemId) || allCodingProblems[0];
 
+  // Editor configuration
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('javascript');
   const [code, setCode] = useState<string>(() => {
     const saved = studentDrafts?.[allCodingProblems[0]?.id]?.[selectedLanguage];
     return saved || getLanguageStarter(allCodingProblems[0] || {}, selectedLanguage);
   });
-  const [activeTestTab, setActiveTestTab] = useState<number>(0);
+
+  const [fontSize, setFontSize] = useState<number>(14);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [customInputText, setCustomInputText] = useState<string>('');
+  const [showCustomInput, setShowCustomInput] = useState<boolean>(false);
+
+  // Search in code
+  const [showFindBar, setShowFindBar] = useState<boolean>(false);
+  const [findQuery, setFindQuery] = useState<string>('');
+  const [cursorLine, setCursorLine] = useState<number>(1);
+  const [cursorCol, setCursorCol] = useState<number>(1);
+
+  // Resizable split dividers
+  // Horizontal split (problem vs editor pane) on laptop
+  const [splitRatioH, setSplitRatioH] = useState<number>(40);
+  const [isDraggingH, setIsDraggingH] = useState<boolean>(false);
+
+  // Vertical split (editor vs output panel)
+  const [splitRatioV, setSplitRatioV] = useState<number>(60);
+  const [isDraggingV, setIsDraggingV] = useState<boolean>(false);
+
+  // Mobile Workspace Tabs ('problem' | 'code' | 'output')
+  const [mobileTab, setMobileTab] = useState<'problem' | 'code' | 'output'>('code');
+
+  // Output panel tabs ('test_cases' | 'output' | 'errors' | 'custom_input')
+  const [outputTab, setOutputTab] = useState<'test_cases' | 'output' | 'errors' | 'custom_input'>(
+    'test_cases'
+  );
+  const [activeTestCaseIndex, setActiveTestCaseIndex] = useState<number>(0);
 
   // Execution state
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [executionState, setExecutionState] = useState<'idle' | 'compiling' | 'running' | 'finished'>('idle');
   const [runSummary, setRunSummary] = useState<RunSummary | null>(null);
   const [solvedProblemIds, setSolvedProblemIds] = useState<Set<string>>(new Set());
-  const [submissionSuccessToast, setSubmissionSuccessToast] = useState<{
-    points: number;
-    title: string;
-  } | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'info' | 'error'; text: string } | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
+  const [failingLine, setFailingLine] = useState<number | null>(null);
 
-  // Sync starter code or saved student draft when problem or language changes
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Sync draft code when problem or language changes
   useEffect(() => {
     if (activeProblem) {
       const saved = studentDrafts?.[activeProblem.id]?.[selectedLanguage];
       setCode(saved || getLanguageStarter(activeProblem, selectedLanguage));
       setRunSummary(null);
-      setActiveTestTab(0);
+      setFailingLine(null);
+      setActiveTestCaseIndex(0);
     }
   }, [selectedProblemId, selectedLanguage, activeProblem]);
 
-  // Filtered problems list
-  const filteredProblems = allCodingProblems.filter((p) => {
-    const matchesPlatform = selectedPlatform === 'all' || p.platform === selectedPlatform;
-    const matchesDifficulty = selectedDifficulty === 'all' || p.difficulty === selectedDifficulty;
-    return matchesPlatform && matchesDifficulty;
-  });
+  // Save draft debounce
+  const handleCodeChange = (newCode: string) => {
+    setCode(newCode);
+    if (activeProblem) {
+      saveStudentDraft(activeProblem.id, selectedLanguage, newCode);
+    }
+  };
 
-  // Handle Tab key in code editor
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  // Keyboard Shortcuts (Ctrl/Cmd + Enter -> Run, Ctrl/Cmd + S -> Save, Ctrl/Cmd + F -> Find)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const modKey = isMac ? e.metaKey : e.ctrlKey;
+
+      if (modKey && e.key === 'Enter') {
+        e.preventDefault();
+        handleRunCode();
+      } else if (modKey && e.key === 's') {
+        e.preventDefault();
+        if (activeProblem) {
+          saveStudentDraft(activeProblem.id, selectedLanguage, code);
+          setToastMessage({ type: 'info', text: 'Draft code saved locally.' });
+          setTimeout(() => setToastMessage(null), 2500);
+        }
+      } else if (modKey && e.key === 'f') {
+        e.preventDefault();
+        setShowFindBar((prev) => !prev);
+      } else if (e.key === 'Escape') {
+        if (isFullscreen) setIsFullscreen(false);
+        if (showFindBar) setShowFindBar(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [code, selectedLanguage, activeProblem, isFullscreen, showFindBar]);
+
+  // Draggable Divider Handlers
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDraggingH && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const ratio = ((e.clientX - rect.left) / rect.width) * 100;
+        if (ratio >= 25 && ratio <= 65) setSplitRatioH(ratio);
+      }
+      if (isDraggingV && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const ratio = ((e.clientY - rect.top) / rect.height) * 100;
+        if (ratio >= 30 && ratio <= 80) setSplitRatioV(ratio);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingH(false);
+      setIsDraggingV(false);
+    };
+
+    if (isDraggingH || isDraggingV) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingH, isDraggingV]);
+
+  // Enhanced Editor Key Down: Auto-indent, Tab, Auto-closing brackets
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const textarea = e.currentTarget;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+
+    // 1. Tab Indentation (2 spaces)
     if (e.key === 'Tab') {
       e.preventDefault();
-      const textarea = e.currentTarget;
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
       const newCode = code.substring(0, start) + '  ' + code.substring(end);
-      setCode(newCode);
-      saveStudentDraft(activeProblem.id, selectedLanguage, newCode);
+      handleCodeChange(newCode);
       setTimeout(() => {
         textarea.selectionStart = textarea.selectionEnd = start + 2;
+      }, 0);
+      return;
+    }
+
+    // 2. Auto-closing brackets and quotes
+    const pairs: Record<string, string> = {
+      '(': ')',
+      '[': ']',
+      '{': '}',
+      '"': '"',
+      "'": "'",
+      '`': '`',
+    };
+
+    if (pairs[e.key]) {
+      e.preventDefault();
+      const closeChar = pairs[e.key];
+      const newCode = code.substring(0, start) + e.key + closeChar + code.substring(end);
+      handleCodeChange(newCode);
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 1;
+      }, 0);
+      return;
+    }
+
+    // 3. Auto-indentation on Enter
+    if (e.key === 'Enter') {
+      const lineStart = code.lastIndexOf('\n', start - 1) + 1;
+      const currentLine = code.substring(lineStart, start);
+      const matchIndent = currentLine.match(/^\s*/);
+      let indent = matchIndent ? matchIndent[0] : '';
+
+      // If line ended with colon (Python) or opening brace (JS/C++/Java), add extra indent
+      if (currentLine.trim().endsWith('{') || currentLine.trim().endsWith(':')) {
+        indent += '  ';
+      }
+
+      e.preventDefault();
+      const newCode = code.substring(0, start) + '\n' + indent + code.substring(end);
+      handleCodeChange(newCode);
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 1 + indent.length;
       }, 0);
     }
   };
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  // Cursor position tracking
+  const handleCursorMove = () => {
+    if (!textareaRef.current) return;
+    const pos = textareaRef.current.selectionStart;
+    const lines = code.substring(0, pos).split('\n');
+    setCursorLine(lines.length);
+    setCursorCol(lines[lines.length - 1].length + 1);
   };
 
-  const handleResetCode = () => {
-    const freshTemplate = getLanguageStarter(activeProblem, selectedLanguage);
-    setCode(freshTemplate);
-    saveStudentDraft(activeProblem.id, selectedLanguage, freshTemplate);
-    setRunSummary(null);
-  };
-
-  // Run visible sample test cases
-  const handleRunSampleCases = async () => {
+  // Run Code (Sample Cases or Custom Input)
+  const handleRunCode = async () => {
     setIsRunning(true);
+    setExecutionState('compiling');
+    setMobileTab('output');
+    setFailingLine(null);
+
+    // If Custom Input tab active or custom input entered, run direct execution
+    if (outputTab === 'custom_input' || customInputText.trim().length > 0) {
+      setTimeout(() => setExecutionState('running'), 200);
+      const summary = await runDirectCode(selectedLanguage, code, customInputText);
+      setRunSummary(summary);
+      setIsRunning(false);
+      setExecutionState('finished');
+      if (summary.errorLine) setFailingLine(summary.errorLine);
+      if (summary.errorMessage) setOutputTab('errors');
+      else setOutputTab('output');
+      return;
+    }
+
+    // Otherwise run visible sample test cases
+    setTimeout(() => setExecutionState('running'), 250);
     const summary = await runProblemCode(activeProblem, code, selectedLanguage, true);
     setRunSummary(summary);
     setIsRunning(false);
+    setExecutionState('finished');
+
+    if (summary.errorLine) setFailingLine(summary.errorLine);
+    if (summary.compileError) {
+      setOutputTab('errors');
+    } else {
+      setOutputTab('test_cases');
+    }
   };
 
-  // Submit Solution (runs all cases including hidden, awards XP)
+  // Submit Solution (runs ALL test cases including hidden ones, awards XP)
   const handleSubmitSolution = async () => {
     setIsSubmitting(true);
+    setExecutionState('compiling');
+    setMobileTab('output');
+    setFailingLine(null);
+
+    setTimeout(() => setExecutionState('running'), 250);
     const summary = await runProblemCode(activeProblem, code, selectedLanguage, false);
     setRunSummary(summary);
     setIsSubmitting(false);
+    setExecutionState('finished');
+
+    if (summary.errorLine) setFailingLine(summary.errorLine);
+
+    if (summary.compileError) {
+      setOutputTab('errors');
+      return;
+    }
+
+    setOutputTab('test_cases');
 
     if (summary.allPassed) {
-      // Trigger confetti celebration
+      // Confetti celebration
       try {
         confetti({
-          particleCount: 80,
-          spread: 70,
+          particleCount: 90,
+          spread: 80,
           origin: { y: 0.6 },
-          colors: ['#6366f1', '#10b981', '#f59e0b', '#ec4899'],
+          colors: ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#38bdf8'],
         });
-      } catch {
-        // Safe fallback
-      }
+      } catch {}
 
-      // Mark problem as solved locally
+      // Mark solved locally
       setSolvedProblemIds((prev) => new Set(prev).add(activeProblem.id));
 
       // Trigger verified XP Event
@@ -158,523 +355,761 @@ export const InbuiltCodeCompiler: React.FC = () => {
       });
 
       if (res.success) {
-        setSubmissionSuccessToast({
-          points: res.pointsAwarded,
-          title: activeProblem.title,
+        setToastMessage({
+          type: 'success',
+          text: `Accepted! +${res.pointsAwarded} Academic XP awarded for "${activeProblem.title}".`,
         });
-        setTimeout(() => setSubmissionSuccessToast(null), 5000);
+        setTimeout(() => setToastMessage(null), 5000);
       }
+    } else {
+      setToastMessage({
+        type: 'error',
+        text: `Submission Incomplete: ${summary.totalTests - summary.totalPassed} test case(s) failed.`,
+      });
+      setTimeout(() => setToastMessage(null), 4000);
     }
   };
 
-  // Platform visual badges
-  const getPlatformBadge = (platform: Platform) => {
-    switch (platform) {
-      case 'leetcode':
-        return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-            LeetCode
-          </span>
-        );
-      case 'hackerrank':
-        return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-            HackerRank
-          </span>
-        );
-      case 'codeforces':
-        return (
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40">
-            Codeforces
-          </span>
-        );
-    }
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  const getDifficultyBadge = (difficulty: Difficulty) => {
-    switch (difficulty) {
-      case 'easy':
-        return <span className="text-emerald-400 font-semibold text-[11px]">Easy (+10 XP)</span>;
-      case 'medium':
-        return <span className="text-amber-400 font-semibold text-[11px]">Medium (+20 XP)</span>;
-      case 'hard':
-        return <span className="text-rose-400 font-semibold text-[11px]">Hard (+40 XP)</span>;
-    }
+  const handleResetCode = () => {
+    const fresh = getLanguageStarter(activeProblem, selectedLanguage);
+    handleCodeChange(fresh);
+    setRunSummary(null);
+    setFailingLine(null);
   };
 
-  // Line numbers calculation
-  const lineCount = Math.max(code.split('\n').length, 12);
+  // Jump editor to specific line number (from compiler error output)
+  const jumpToLine = (lineNum: number) => {
+    setFailingLine(lineNum);
+    if (!textareaRef.current) return;
+    const lines = code.split('\n');
+    let charIndex = 0;
+    for (let i = 0; i < Math.min(lineNum - 1, lines.length); i++) {
+      charIndex += lines[i].length + 1;
+    }
+    textareaRef.current.focus();
+    textareaRef.current.setSelectionRange(charIndex, charIndex + (lines[lineNum - 1]?.length || 0));
+  };
+
+  // Filtered problem list
+  const filteredProblems = allCodingProblems.filter((p) => {
+    const matchesPlatform = selectedPlatform === 'all' || p.platform === selectedPlatform;
+    const matchesDifficulty = selectedDifficulty === 'all' || p.difficulty === selectedDifficulty;
+    return matchesPlatform && matchesDifficulty;
+  });
+
+  const lineCount = Math.max(code.split('\n').length, 16);
   const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
 
+  // Find occurrences in code
+  const findMatchesCount = useMemo(() => {
+    if (!findQuery.trim()) return 0;
+    const regex = new RegExp(findQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const matches = code.match(regex);
+    return matches ? matches.length : 0;
+  }, [code, findQuery]);
+
+  const workspaceHeightClass = isFullscreen
+    ? 'fixed inset-0 z-50 p-2 sm:p-4 bg-slate-950 overflow-hidden'
+    : 'min-h-[calc(100dvh-130px)]';
+
   return (
-    <div className="space-y-6">
-      {/* Toast Notification */}
-      {submissionSuccessToast && (
-        <div className="fixed bottom-6 right-6 z-50 p-4 rounded-2xl bg-slate-900 border border-emerald-500/50 text-white shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="font-bold text-xs text-white">Accepted & Verified!</div>
-            <div className="text-[11px] text-emerald-300">
-              +{submissionSuccessToast.points} XP awarded for "{submissionSuccessToast.title}".
-            </div>
-          </div>
+    <div className={`space-y-4 ${workspaceHeightClass}`} ref={containerRef}>
+      {/* Toast Notice */}
+      {toastMessage && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 p-4 rounded-2xl border shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200 ${
+            toastMessage.type === 'success'
+              ? 'bg-slate-900 border-emerald-500/60 text-white'
+              : toastMessage.type === 'error'
+              ? 'bg-slate-900 border-rose-500/60 text-white'
+              : 'bg-slate-900 border-indigo-500/60 text-white'
+          }`}
+        >
+          {toastMessage.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          ) : toastMessage.type === 'error' ? (
+            <XCircle className="w-5 h-5 text-rose-400 shrink-0" />
+          ) : (
+            <Sparkles className="w-5 h-5 text-indigo-400 shrink-0" />
+          )}
+          <span className="text-xs font-semibold">{toastMessage.text}</span>
         </div>
       )}
 
-      {/* Header Banner */}
-      <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-indigo-400 mb-1.5">
-            <Terminal className="w-4 h-4 text-emerald-400" />
-            <span>INBUILT ALGORITHMIC PRACTICE IDE</span>
-          </div>
-          <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
-            <span>Competitive Code Arena</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-600/30 text-indigo-300 font-normal border border-indigo-500/40">
-              Compiler Sandbox
-            </span>
-          </h2>
-          <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-            Practice curated algorithmic challenges from LeetCode, HackerRank, and Codeforces directly inside MSOT MiraiQuest.
-            Execute unit tests in real time and submit verified solutions for official XP.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-center min-w-[100px]">
-            <div className="text-[10px] text-slate-400 uppercase font-semibold">Problems Solved</div>
-            <div className="text-xl font-bold text-emerald-400 tabular-nums">
-              {solvedProblemIds.size + (activeStudent.codingHandles.verifiedProblemsCount || 0)}
-            </div>
-          </div>
-          <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-center min-w-[100px]">
-            <div className="text-[10px] text-slate-400 uppercase font-semibold">Verified XP Rate</div>
-            <div className="text-xl font-bold text-amber-400 tabular-nums">
-              10-40 <span className="text-xs font-normal text-slate-400">XP</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filter Chips Bar */}
-      <div className={`p-3.5 rounded-xl border flex flex-wrap items-center justify-between gap-3 text-xs transition-colors ${
-        isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-xs'
-      }`}>
-        {/* Platform Selector */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className={`font-medium mr-1 flex items-center gap-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            <Filter className="w-3.5 h-3.5" /> Platform:
-          </span>
-          {[
-            { id: 'all', label: 'All Platforms' },
-            { id: 'leetcode', label: 'LeetCode' },
-            { id: 'hackerrank', label: 'HackerRank' },
-            { id: 'codeforces', label: 'Codeforces' },
-          ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setSelectedPlatform(item.id as any)}
-              className={`px-3 py-1 rounded-lg font-medium transition-colors ${
-                selectedPlatform === item.id
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : isDark
-                  ? 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                  : 'bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Difficulty Filter & Google Search Trigger */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 flex-wrap mr-1">
-            <span className={`font-medium mr-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Difficulty:</span>
-            {[
-              { id: 'all', label: 'All' },
-              { id: 'easy', label: 'Easy' },
-              { id: 'medium', label: 'Medium' },
-              { id: 'hard', label: 'Hard' },
-            ].map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setSelectedDifficulty(item.id as any)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                  selectedDifficulty === item.id
-                    ? isDark
-                      ? 'bg-slate-800 text-white border border-slate-700'
-                      : 'bg-slate-200 text-slate-900 border border-slate-300 font-semibold'
-                    : isDark
-                    ? 'text-slate-400 hover:text-slate-200'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={() => setShowSearchModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white font-semibold text-xs shadow-xs transition-all cursor-pointer"
-          >
-            <Search className="w-3.5 h-3.5 text-emerald-200" />
-            <span>Google Search Fetch</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Main IDE Workspace: Split Screen */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Problem Browser & Statement (5 Columns) */}
-        <div className="lg:col-span-5 space-y-4">
-          {/* Problem Selector Dropdown / Quick Switcher */}
-          <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-            <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">
-              Select Practice Problem ({filteredProblems.length} available)
-            </label>
-            <select
-              value={selectedProblemId}
-              onChange={(e) => setSelectedProblemId(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white font-medium focus:outline-none focus:border-indigo-500"
-            >
-              {filteredProblems.map((p) => {
-                const isSolved = solvedProblemIds.has(p.id);
-                return (
-                  <option key={p.id} value={p.id}>
-                    {isSolved ? '✓ ' : ''}[{p.platform.toUpperCase()}] {p.title} ({p.difficulty.toUpperCase()} · +{p.xpReward} XP)
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-
-          {/* Problem Statement Card */}
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-            {/* Header info */}
-            <div>
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  {getPlatformBadge(activeProblem.platform)}
-                  {activeProblem.platformProblemNumber && (
-                    <span className="text-[10px] text-slate-500 font-mono">
-                      #{activeProblem.platformProblemNumber}
-                    </span>
-                  )}
-                </div>
-                <div>{getDifficultyBadge(activeProblem.difficulty)}</div>
-              </div>
-
-              <div className="flex items-baseline justify-between gap-2">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <span>{activeProblem.title}</span>
-                  {solvedProblemIds.has(activeProblem.id) && (
-                    <span className="text-emerald-400 text-xs font-semibold flex items-center gap-1">
-                      <CheckCircle2 className="w-4 h-4" /> Solved
-                    </span>
-                  )}
-                </h3>
-                <span className="text-xs font-bold text-emerald-400">+{activeProblem.xpReward} XP</span>
-              </div>
-
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                <span className="px-2 py-0.5 rounded bg-slate-950 text-slate-400 text-[10px] border border-slate-800">
-                  {activeProblem.category}
-                </span>
-                {activeProblem.tags.map((t) => (
-                  <span
-                    key={t}
-                    className="px-2 py-0.5 rounded bg-slate-950 text-slate-400 text-[10px] border border-slate-800"
-                  >
-                    {t}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Description */}
-            <div className="text-xs text-slate-300 whitespace-pre-line leading-relaxed border-t border-slate-800/80 pt-3">
-              {activeProblem.description}
-            </div>
-
-            {/* Examples */}
-            <div className="space-y-3 pt-2">
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                Sample Test Cases & Scenarios
-              </div>
-              {activeProblem.examples.map((ex, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 text-xs space-y-1.5 font-mono"
-                >
-                  <div className="text-[10px] font-sans font-semibold text-indigo-400">Example {idx + 1}:</div>
-                  <div className="text-slate-300">
-                    <span className="text-slate-500 font-sans">Input: </span>
-                    {ex.input}
-                  </div>
-                  <div className="text-emerald-300">
-                    <span className="text-slate-500 font-sans">Output: </span>
-                    {ex.output}
-                  </div>
-                  {ex.explanation && (
-                    <div className="text-[11px] font-sans text-slate-400 pt-0.5 leading-normal">
-                      <span className="text-slate-500">Explanation: </span>
-                      {ex.explanation}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Constraints */}
-            <div className="pt-2 border-t border-slate-800/80">
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                Constraints
-              </div>
-              <ul className="list-disc pl-4 space-y-1 text-xs text-slate-400 font-mono">
-                {activeProblem.constraints.map((c, i) => (
-                  <li key={i}>{c}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: Inbuilt Code Editor & Test Console (7 Columns) */}
-        <div className="lg:col-span-7 space-y-4">
-          {/* Code Editor Container */}
-          <div className="rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden shadow-xl">
-            {/* Editor Toolbar */}
-            <div className="px-4 py-2.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-3 text-xs">
-              {/* Language Selector */}
-              <div className="flex items-center gap-2">
-                <Code2 className="w-4 h-4 text-indigo-400" />
-                <select
-                  value={selectedLanguage}
-                  onChange={(e) => setSelectedLanguage(e.target.value as SupportedLanguage)}
-                  className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
-                >
-                  <option value="javascript">JavaScript (Node ES2024)</option>
-                  <option value="python">Python 3.12</option>
-                  <option value="c">C (GCC C11)</option>
-                  <option value="cpp">C++ (C++17 / GCC 13)</option>
-                  <option value="java">Java (OpenJDK 21)</option>
-                </select>
-              </div>
-
-              {/* Utility actions */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleResetCode}
-                  title="Reset to boilerplate"
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs transition-colors border border-slate-800 cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Reset</span>
-                </button>
-                <button
-                  onClick={handleCopyCode}
-                  title="Copy code"
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs transition-colors border border-slate-800 cursor-pointer"
-                >
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Code Editor Body with Line Numbers */}
-            <div className="flex bg-slate-950/90 min-h-[340px] max-h-[460px] overflow-y-auto font-mono text-xs text-slate-200">
-              {/* Line Numbers Bar */}
-              <div className="py-4 pl-3 pr-2 text-right text-slate-600 select-none bg-slate-950 border-r border-slate-800/80 shrink-0 min-w-[38px]">
-                {lineNumbers.map((num) => (
-                  <div key={num} className="leading-6">
-                    {num}
-                  </div>
-                ))}
-              </div>
-
-              {/* Textarea */}
-              <textarea
-                value={code}
-                onChange={(e) => {
-                  setCode(e.target.value);
-                  saveStudentDraft(activeProblem.id, selectedLanguage, e.target.value);
-                }}
-                onKeyDown={handleKeyDown}
-                spellCheck={false}
-                className="flex-1 p-4 bg-transparent text-slate-100 resize-none outline-none leading-6 font-mono overflow-x-auto whitespace-pre tab-2"
-                rows={lineCount}
-              />
-            </div>
-
-            {/* Run & Submit Action Footer */}
-            <div className="p-3 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Compiler Sandbox Ready</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {/* Run Sample Cases */}
-                <button
-                  onClick={handleRunSampleCases}
-                  disabled={isRunning || isSubmitting}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs border border-slate-700 transition-colors disabled:opacity-50"
-                >
-                  <Play className={`w-3.5 h-3.5 ${isRunning ? 'animate-spin' : ''}`} />
-                  <span>{isRunning ? 'Running Tests...' : 'Run Code'}</span>
-                </button>
-
-                {/* Submit Solution */}
-                <button
-                  onClick={handleSubmitSolution}
-                  disabled={isRunning || isSubmitting}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition-colors disabled:opacity-50"
-                >
-                  <Zap className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-bounce' : ''}`} />
-                  <span>{isSubmitting ? 'Evaluating Full Suite...' : 'Submit Solution (+XP)'}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Test Case & Diagnostics Console */}
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-            {/* Status Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
-              <div className="flex items-center gap-2 text-xs font-bold text-white uppercase tracking-wider">
-                <Terminal className="w-4 h-4 text-indigo-400" />
-                <span>Test Execution & Verdict</span>
-              </div>
-
-              {runSummary && (
-                <div className="flex items-center gap-3 text-xs">
-                  <span
-                    className={`font-bold flex items-center gap-1 ${
-                      runSummary.allPassed ? 'text-emerald-400' : 'text-rose-400'
-                    }`}
-                  >
-                    {runSummary.allPassed ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        <span>Accepted ({runSummary.totalPassed}/{runSummary.totalTests})</span>
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="w-4 h-4 text-rose-400" />
-                        <span>Wrong Answer ({runSummary.totalPassed}/{runSummary.totalTests})</span>
-                      </>
-                    )}
-                  </span>
-                  <span className="text-slate-400 text-[11px] font-mono">
-                    {runSummary.overallTimeMs} ms · {runSummary.memoryMb} MB
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Error banner if any */}
-            {runSummary?.errorMessage && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono whitespace-pre-wrap">
-                {runSummary.errorMessage}
-              </div>
-            )}
-
-            {/* Test Case Tabs */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-mono">
-              {activeProblem.testCases.map((tc, idx) => {
-                const result = runSummary?.results.find((r) => r.testCaseId === tc.id);
-                const hasResult = !!result;
-                const passed = result?.passed;
-
-                return (
-                  <button
-                    key={tc.id}
-                    onClick={() => setActiveTestTab(idx)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-                      activeTestTab === idx
-                        ? 'bg-slate-800 text-white border border-slate-700'
-                        : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-900'
-                    }`}
-                  >
-                    <span>Case {idx + 1}</span>
-                    {hasResult && (
-                      <span className={`w-1.5 h-1.5 rounded-full ${passed ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Active Test Case Detail */}
-            {activeProblem.testCases[activeTestTab] && (
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/80 text-xs space-y-2.5 font-mono">
-                <div>
-                  <div className="text-[10px] font-sans text-slate-500 uppercase font-semibold mb-0.5">
-                    Input Parameters
-                  </div>
-                  <div className="text-slate-200 bg-slate-900 p-2 rounded-lg border border-slate-800">
-                    {activeProblem.testCases[activeTestTab].inputFormatted}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div>
-                    <div className="text-[10px] font-sans text-slate-500 uppercase font-semibold mb-0.5">
-                      Expected Output
-                    </div>
-                    <div className="text-emerald-400 bg-slate-900 p-2 rounded-lg border border-slate-800">
-                      {activeProblem.testCases[activeTestTab].expectedOutputFormatted}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="text-[10px] font-sans text-slate-500 uppercase font-semibold mb-0.5">
-                      Your Output
-                    </div>
-                    <div
-                      className={`p-2 rounded-lg border font-mono ${
-                        runSummary?.results[activeTestTab]
-                          ? runSummary.results[activeTestTab].passed
-                            ? 'bg-slate-900 text-emerald-400 border-slate-800'
-                            : 'bg-rose-950/30 text-rose-400 border-rose-500/30'
-                          : 'bg-slate-900 text-slate-500 border-slate-800'
-                      }`}
-                    >
-                      {runSummary?.results[activeTestTab]
-                        ? runSummary.results[activeTestTab].actualOutputFormatted
-                        : 'Click "Run Code" or "Submit Solution" to test'}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Stdout / Console logs if any */}
-                {runSummary?.results[activeTestTab]?.stdout &&
-                  runSummary.results[activeTestTab].stdout.length > 0 && (
-                    <div className="pt-1">
-                      <div className="text-[10px] font-sans text-slate-500 uppercase font-semibold mb-0.5">
-                        Captured Standard Output (stdout)
-                      </div>
-                      <div className="text-slate-400 bg-slate-900 p-2 rounded-lg border border-slate-800 text-[11px] whitespace-pre-wrap">
-                        {runSummary.results[activeTestTab].stdout.join('\n')}
-                      </div>
-                    </div>
-                  )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Google Search Problem Importer Modal */}
+      {/* Google Search Modal */}
       <GoogleSearchCodingModal
         isOpen={showSearchModal}
         onClose={() => setShowSearchModal(false)}
       />
+
+      {/* Top Workspace Header & Tool Ribbon */}
+      <div
+        className={`p-3 sm:p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+          isDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+        }`}
+      >
+        {/* Left: Problem Selector & Filter */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-1.5 font-extrabold text-sm sm:text-base">
+            <Terminal className="w-4 h-4 text-emerald-400" />
+            <span>Code Arena</span>
+          </div>
+
+          {/* Problem Dropdown */}
+          <select
+            value={selectedProblemId}
+            onChange={(e) => setSelectedProblemId(e.target.value)}
+            className={`text-xs font-bold py-1.5 px-3 rounded-xl border cursor-pointer max-w-[200px] sm:max-w-[260px] truncate ${
+              isDark
+                ? 'bg-slate-950 border-slate-700 text-white'
+                : 'bg-slate-50 border-slate-300 text-slate-900'
+            }`}
+          >
+            {filteredProblems.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.title} ({p.difficulty.toUpperCase()})
+              </option>
+            ))}
+          </select>
+
+          {/* Difficulty Badge */}
+          <span
+            className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+              activeProblem.difficulty === 'easy'
+                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                : activeProblem.difficulty === 'medium'
+                ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+            }`}
+          >
+            {activeProblem.difficulty} (+{activeProblem.xpReward} XP)
+          </span>
+
+          {/* Search External Catalog Button */}
+          <button
+            onClick={() => setShowSearchModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/25 transition-colors text-xs font-semibold cursor-pointer"
+            title="Search LeetCode, HackerRank & Codeforces problem database"
+          >
+            <Search className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Search Catalog</span>
+          </button>
+        </div>
+
+        {/* Right: Language Selector & Editor View Controls */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Language Selector */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-semibold text-slate-400 hidden sm:inline">Language:</span>
+            <select
+              value={selectedLanguage}
+              onChange={(e) => setSelectedLanguage(e.target.value as SupportedLanguage)}
+              className={`text-xs font-bold py-1.5 px-3 rounded-xl border cursor-pointer ${
+                isDark ? 'bg-slate-950 border-slate-700 text-indigo-300' : 'bg-slate-50 border-slate-300 text-indigo-700'
+              }`}
+            >
+              <option value="python">Python 3 (Pyodide / GCC)</option>
+              <option value="javascript">JavaScript (Node.js 18)</option>
+              <option value="cpp">C++17 (g++ -O2)</option>
+              <option value="c">C11 (gcc -O2)</option>
+              <option value="java">Java 17 (OpenJDK)</option>
+            </select>
+          </div>
+
+          {/* Font Size A- / A+ */}
+          <div className="flex items-center border rounded-xl overflow-hidden border-slate-700">
+            <button
+              onClick={() => setFontSize((s) => Math.max(12, s - 1))}
+              className="px-2 py-1 text-xs font-bold hover:bg-slate-800 text-slate-300 cursor-pointer"
+              title="Decrease font size"
+            >
+              A-
+            </button>
+            <span className="px-1.5 text-[10px] font-mono text-slate-400">{fontSize}px</span>
+            <button
+              onClick={() => setFontSize((s) => Math.min(20, s + 1))}
+              className="px-2 py-1 text-xs font-bold hover:bg-slate-800 text-slate-300 cursor-pointer"
+              title="Increase font size"
+            >
+              A+
+            </button>
+          </div>
+
+          {/* Fullscreen Toggle */}
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="p-1.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 transition-colors cursor-pointer"
+            title={isFullscreen ? 'Exit Fullscreen (Esc)' : 'Fullscreen Mode'}
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Workspace Tabs (< md screens) */}
+      <div className="flex md:hidden rounded-xl border border-slate-800 bg-slate-950 p-1">
+        {(['problem', 'code', 'output'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setMobileTab(tab)}
+            className={`flex-1 py-1.5 text-xs font-bold rounded-lg capitalize transition-colors cursor-pointer ${
+              mobileTab === tab
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {/* Main Split Workspace Container */}
+      <div className="flex flex-col md:flex-row gap-3 h-[calc(100dvh-200px)] min-h-[550px] relative">
+        {/* ================= LEFT PANE: Problem Description ================= */}
+        <div
+          className={`flex-col rounded-2xl border overflow-hidden ${
+            mobileTab === 'problem' ? 'flex w-full h-full' : 'hidden md:flex'
+          } ${
+            isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+          }`}
+          style={{ width: window.innerWidth >= 768 ? `${splitRatioH}%` : '100%' }}
+        >
+          {/* Problem Header */}
+          <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">
+                {activeProblem.platform.toUpperCase()} #{activeProblem.platformProblemNumber || ''}
+              </div>
+              <h3 className="text-base sm:text-lg font-extrabold mt-0.5">{activeProblem.title}</h3>
+            </div>
+            {activeProblem.sourceUrl && (
+              <a
+                href={activeProblem.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-indigo-400 hover:underline flex items-center gap-1 font-semibold shrink-0"
+              >
+                <span>Original</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
+          </div>
+
+          {/* Problem Body (Scrollable) */}
+          <div className="p-4 sm:p-5 overflow-y-auto thin-scrollbar space-y-4 text-xs leading-relaxed">
+            {/* Description */}
+            <div className="whitespace-pre-line font-normal text-slate-300">
+              {activeProblem.description}
+            </div>
+
+            {/* Examples */}
+            {activeProblem.examples && activeProblem.examples.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <div className="font-bold text-xs uppercase tracking-wider text-slate-400">Examples</div>
+                {activeProblem.examples.map((ex, i) => (
+                  <div
+                    key={i}
+                    className={`p-3 rounded-xl border text-[11px] font-mono ${
+                      isDark ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  >
+                    <div>
+                      <span className="text-slate-400">Input: </span>
+                      <span className="text-emerald-400">{ex.input}</span>
+                    </div>
+                    <div className="mt-1">
+                      <span className="text-slate-400">Output: </span>
+                      <span className="text-amber-400">{ex.output}</span>
+                    </div>
+                    {ex.explanation && (
+                      <div className="mt-1.5 text-slate-400 font-sans text-[11px]">
+                        <span className="font-semibold text-slate-300">Explanation: </span>
+                        {ex.explanation}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Constraints */}
+            {activeProblem.constraints && activeProblem.constraints.length > 0 && (
+              <div className="pt-2">
+                <div className="font-bold text-xs uppercase tracking-wider text-slate-400 mb-2">Constraints</div>
+                <ul className="list-disc list-inside space-y-1 text-[11px] font-mono text-slate-300">
+                  {activeProblem.constraints.map((c, i) => (
+                    <li key={i}>{c}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Tags */}
+            {activeProblem.tags && (
+              <div className="flex flex-wrap gap-1.5 pt-2">
+                {activeProblem.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700"
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Horizontal Draggable Divider (Laptop only) */}
+        <div
+          onMouseDown={() => setIsDraggingH(true)}
+          className="hidden md:flex items-center justify-center w-1.5 hover:w-2 hover:bg-indigo-500/80 transition-all cursor-col-resize select-none shrink-0 rounded-full"
+          title="Drag to resize problem and editor panes"
+        >
+          <div className="w-0.5 h-12 bg-slate-700 rounded-full" />
+        </div>
+
+        {/* ================= RIGHT PANE: Code Editor + Output Panel ================= */}
+        <div
+          className={`flex-col flex-1 rounded-2xl border overflow-hidden ${
+            mobileTab !== 'problem' ? 'flex' : 'hidden md:flex'
+          } ${
+            isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
+          }`}
+        >
+          {/* Top of Editor: Controls Bar */}
+          <div className="px-3 py-2 border-b border-slate-800 flex items-center justify-between gap-2 flex-wrap bg-slate-950/70 text-xs">
+            {/* Left: Editor actions */}
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[11px] text-slate-400 flex items-center gap-1.5">
+                <FileCode className="w-3.5 h-3.5 text-indigo-400" />
+                <span>solution.{selectedLanguage === 'python' ? 'py' : selectedLanguage === 'javascript' ? 'js' : selectedLanguage === 'cpp' ? 'cpp' : selectedLanguage === 'c' ? 'c' : 'java'}</span>
+              </span>
+
+              {failingLine && (
+                <button
+                  onClick={() => jumpToLine(failingLine)}
+                  className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-bold flex items-center gap-1 animate-pulse cursor-pointer"
+                >
+                  <AlertCircle className="w-3 h-3" />
+                  <span>Line {failingLine} Error</span>
+                </button>
+              )}
+            </div>
+
+            {/* Right: Reset, Copy, Shortcuts */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleResetCode}
+                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                title="Reset to starter template"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                onClick={handleCopyCode}
+                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                title="Copy code to clipboard"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+
+              <button
+                onClick={handleRunCode}
+                disabled={isRunning || isSubmitting}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/40 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title="Run Sample Test Cases or Custom Input (Ctrl+Enter)"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>{isRunning ? 'Running...' : 'Run'}</span>
+              </button>
+
+              <button
+                onClick={handleSubmitSolution}
+                disabled={isRunning || isSubmitting}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-extrabold text-xs shadow-md shadow-emerald-600/30 hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title="Submit solution to run against all test cases for verified XP"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{isSubmitting ? 'Evaluating...' : 'Submit'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Find In Code Search Bar */}
+          {showFindBar && (
+            <div className="px-3 py-2 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 flex-1">
+                <Search className="w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Find in code..."
+                  value={findQuery}
+                  onChange={(e) => setFindQuery(e.target.value)}
+                  className="bg-transparent text-white focus:outline-none w-full font-mono text-xs"
+                  autoFocus
+                />
+                <span className="text-[10px] text-slate-400 tabular-nums">
+                  {findMatchesCount} matches
+                </span>
+              </div>
+              <button
+                onClick={() => setShowFindBar(false)}
+                className="text-slate-400 hover:text-white text-xs px-1.5 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Editor Area (~60% height on desktop, resizable vertically) */}
+          <div
+            className={`relative flex font-mono overflow-hidden ${
+              mobileTab === 'output' ? 'hidden md:flex' : 'flex'
+            }`}
+            style={{
+              height: window.innerWidth >= 768 ? `${splitRatioV}%` : '60%',
+              fontSize: `${fontSize}px`,
+            }}
+          >
+            {/* Line Numbers Gutter */}
+            <div
+              className={`select-none text-right pr-3 pl-2 py-3 border-r overflow-hidden shrink-0 text-slate-500 ${
+                isDark ? 'bg-slate-950/90 border-slate-800' : 'bg-slate-100 border-slate-200'
+              }`}
+              style={{ width: '48px', fontSize: `${Math.max(10, fontSize - 2)}px` }}
+            >
+              {lineNumbers.map((num) => {
+                const isFailing = failingLine === num;
+                const isCurrent = cursorLine === num;
+                return (
+                  <div
+                    key={num}
+                    onClick={() => jumpToLine(num)}
+                    className={`leading-relaxed cursor-pointer transition-colors ${
+                      isFailing
+                        ? 'text-rose-400 font-bold bg-rose-500/20 rounded px-1'
+                        : isCurrent
+                        ? 'text-indigo-400 font-bold'
+                        : 'hover:text-slate-300'
+                    }`}
+                  >
+                    {num}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Textarea Code Input */}
+            <textarea
+              ref={textareaRef}
+              value={code}
+              onChange={(e) => handleCodeChange(e.target.value)}
+              onKeyDown={handleEditorKeyDown}
+              onKeyUp={handleCursorMove}
+              onClick={handleCursorMove}
+              spellCheck={false}
+              className={`w-full h-full p-3 font-mono leading-relaxed resize-none focus:outline-none whitespace-pre overflow-auto thin-scrollbar ${
+                isDark
+                  ? 'bg-slate-950 text-slate-100 selection:bg-indigo-600/50'
+                  : 'bg-white text-slate-900 selection:bg-indigo-200'
+              }`}
+              style={{ fontSize: `${fontSize}px` }}
+              aria-label="Code editor"
+            />
+          </div>
+
+          {/* Vertical Draggable Splitter Divider */}
+          <div
+            onMouseDown={() => setIsDraggingV(true)}
+            className="hidden md:flex items-center justify-center h-2 hover:h-2.5 hover:bg-indigo-500/80 transition-all cursor-row-resize select-none shrink-0 bg-slate-950 border-y border-slate-800"
+            title="Drag to resize editor and output panel"
+          >
+            <div className="w-12 h-0.5 bg-slate-700 rounded-full" />
+          </div>
+
+          {/* ================= OUTPUT PANEL ================= */}
+          <div
+            className={`flex-col flex-1 border-t md:border-t-0 overflow-hidden ${
+              mobileTab === 'code' ? 'hidden md:flex' : 'flex'
+            } ${isDark ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900'}`}
+          >
+            {/* Output Panel Tabs */}
+            <div className="px-3 py-2 border-b border-slate-800 flex items-center justify-between gap-2 flex-wrap bg-slate-900/90 text-xs">
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                <button
+                  onClick={() => setOutputTab('test_cases')}
+                  className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
+                    outputTab === 'test_cases'
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Test Cases {runSummary ? `(${runSummary.totalPassed}/${runSummary.totalTests})` : ''}
+                </button>
+
+                <button
+                  onClick={() => setOutputTab('output')}
+                  className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
+                    outputTab === 'output'
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Output (stdout)
+                </button>
+
+                <button
+                  onClick={() => setOutputTab('errors')}
+                  className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors cursor-pointer flex items-center gap-1 ${
+                    outputTab === 'errors'
+                      ? 'bg-rose-600 text-white'
+                      : runSummary?.errorMessage || runSummary?.compileError
+                      ? 'text-rose-400 hover:text-rose-300 font-extrabold animate-pulse'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>Errors</span>
+                  {(runSummary?.errorMessage || runSummary?.compileError) && (
+                    <span className="w-2 h-2 rounded-full bg-rose-400" />
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setOutputTab('custom_input')}
+                  className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
+                    outputTab === 'custom_input'
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Custom Input (stdin)
+                </button>
+              </div>
+
+              {/* Execution State & Stats (Time, Memory) */}
+              <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                {executionState === 'compiling' && (
+                  <span className="text-amber-400 flex items-center gap-1 font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                    Compiling...
+                  </span>
+                )}
+                {executionState === 'running' && (
+                  <span className="text-cyan-400 flex items-center gap-1 font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                    Running tests...
+                  </span>
+                )}
+                {runSummary && (
+                  <>
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-slate-400" />
+                      <span className="tabular-nums">{runSummary.overallTimeMs}ms</span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Cpu className="w-3 h-3 text-slate-400" />
+                      <span className="tabular-nums">{runSummary.memoryMb}MB</span>
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Output Tab Body */}
+            <div className="p-3.5 sm:p-4 flex-1 overflow-y-auto thin-scrollbar text-xs font-mono">
+              {/* TAB 1: Test Cases */}
+              {outputTab === 'test_cases' && (
+                <div>
+                  {runSummary && runSummary.results.length > 0 ? (
+                    <div className="space-y-3">
+                      {/* Status Summary Banner */}
+                      <div
+                        className={`p-3 rounded-xl border flex items-center justify-between ${
+                          runSummary.allPassed
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                            : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 font-bold text-xs">
+                          {runSummary.allPassed ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                          )}
+                          <span>
+                            {runSummary.allPassed
+                              ? `All ${runSummary.totalTests} Test Cases Passed!`
+                              : `${runSummary.totalTests - runSummary.totalPassed} of ${runSummary.totalTests} Test Cases Failed`}
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-semibold tabular-nums">
+                          {runSummary.totalPassed}/{runSummary.totalTests} Passed
+                        </span>
+                      </div>
+
+                      {/* Case selector pills */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {runSummary.results.map((r, idx) => (
+                          <button
+                            key={r.testCaseId}
+                            onClick={() => setActiveTestCaseIndex(idx)}
+                            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                              activeTestCaseIndex === idx
+                                ? 'ring-2 ring-indigo-500 bg-slate-800 text-white'
+                                : r.passed
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                            }`}
+                          >
+                            <span>Case {idx + 1}</span>
+                            {r.isHidden && <span className="text-[9px] opacity-75">[Hidden]</span>}
+                            {r.passed ? '✓' : '✗'}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Active Test Case Detail */}
+                      {runSummary.results[activeTestCaseIndex] && (
+                        <div className="p-3.5 rounded-xl border border-slate-800 bg-slate-900/60 space-y-2.5">
+                          {runSummary.results[activeTestCaseIndex].isHidden ? (
+                            <div className="p-3 text-center text-slate-400 space-y-1">
+                              <div className="font-bold text-slate-300">Protected Hidden Test Case</div>
+                              <div className="text-[11px]">
+                                Input and expected output are concealed to verify algorithmic generalizability.
+                              </div>
+                              <div className="mt-2 text-xs font-bold">
+                                Result:{' '}
+                                <span
+                                  className={
+                                    runSummary.results[activeTestCaseIndex].passed
+                                      ? 'text-emerald-400'
+                                      : 'text-rose-400'
+                                  }
+                                >
+                                  {runSummary.results[activeTestCaseIndex].passed ? 'PASSED ✓' : 'FAILED ✗'}
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase">Input:</div>
+                                <div className="mt-1 p-2 rounded bg-slate-950 text-emerald-300 font-mono text-[11px] overflow-x-auto">
+                                  {runSummary.results[activeTestCaseIndex].inputFormatted}
+                                </div>
+                              </div>
+
+                              <div>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase">Expected Output:</div>
+                                <div className="mt-1 p-2 rounded bg-slate-950 text-amber-300 font-mono text-[11px] overflow-x-auto">
+                                  {runSummary.results[activeTestCaseIndex].expectedOutputFormatted}
+                                </div>
+                              </div>
+
+                              <div>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase">Actual Output:</div>
+                                <div
+                                  className={`mt-1 p-2 rounded bg-slate-950 font-mono text-[11px] overflow-x-auto ${
+                                    runSummary.results[activeTestCaseIndex].passed
+                                      ? 'text-emerald-300'
+                                      : 'text-rose-300'
+                                  }`}
+                                >
+                                  {runSummary.results[activeTestCaseIndex].actualOutputFormatted}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="h-32 flex flex-col items-center justify-center text-center text-slate-500">
+                      <Terminal className="w-8 h-8 mb-2 opacity-50" />
+                      <div className="font-bold text-xs">Ready to Run</div>
+                      <div className="text-[11px] mt-0.5">
+                        Click "Run" to test sample cases or "Submit" to test all cases.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 2: Output (stdout) */}
+              {outputTab === 'output' && (
+                <div>
+                  {runSummary?.stdout ? (
+                    <pre className="whitespace-pre-wrap text-emerald-300 leading-relaxed font-mono text-xs">
+                      {runSummary.stdout}
+                    </pre>
+                  ) : (
+                    <div className="text-slate-500 italic">No standard output printed yet.</div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 3: Errors (stderr / compile_output) */}
+              {outputTab === 'errors' && (
+                <div>
+                  {runSummary?.errorMessage || runSummary?.compileError ? (
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 leading-relaxed font-mono text-xs whitespace-pre-wrap">
+                        {runSummary.compileError || runSummary.errorMessage}
+                      </div>
+
+                      {runSummary.errorLine && (
+                        <button
+                          onClick={() => jumpToLine(runSummary.errorLine!)}
+                          className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                        >
+                          <AlertCircle className="w-4 h-4" />
+                          <span>Jump to Line {runSummary.errorLine}</span>
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-slate-500 italic">No errors detected. Build is clean!</div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 4: Custom Input (stdin) */}
+              {outputTab === 'custom_input' && (
+                <div className="space-y-3">
+                  <div className="text-slate-400 text-xs font-semibold">
+                    Provide custom input data to feed into your program via standard input (`stdin` / `cin` / `sys.stdin`):
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={customInputText}
+                    onChange={(e) => setCustomInputText(e.target.value)}
+                    placeholder="Enter custom stdin lines here..."
+                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 font-mono text-xs focus:outline-none focus:border-indigo-500 resize-none"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleRunCode}
+                      disabled={isRunning}
+                      className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>Run with Custom Input</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

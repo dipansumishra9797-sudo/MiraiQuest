@@ -69,6 +69,14 @@ export function initWebSocketServer(server: http.Server): WebSocketServer {
     const section = url.searchParams.get('section') || undefined;
 
     const client: ConnectedClient = { ws, userId, role, campus, year, section };
+
+    // Enforce student-only notification gateway
+    if (role && role !== 'student') {
+      console.log(`[WebSocket] Rejected non-student client (${role}): notifications are student-only.`);
+      ws.close(1008, 'Notifications are enabled for student accounts only.');
+      return;
+    }
+
     connectedClients.add(client);
 
     console.log(`[WebSocket] Client connected: user=${userId}, role=${role}, campus=${campus}, section=${section}. Total clients: ${connectedClients.size}`);

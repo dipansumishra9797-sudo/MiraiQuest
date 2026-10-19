@@ -4,6 +4,7 @@ import { generateQuizQuestionsFromAI } from '../../modules/geminiService';
 import { FacultyAssignmentManager } from './FacultyAssignmentManager';
 import { CODING_TOPICS } from '../../data/codingPracticeCatalog';
 import { GlobalFilterBar } from '../GlobalFilterBar';
+import { CountUp } from '../common/CountUp';
 import {
   Users,
   CheckCircle,
@@ -32,6 +33,7 @@ import {
   ArrowUpDown,
   GraduationCap,
 } from 'lucide-react';
+import { IllustratedEmptyState, GameStatBadge } from '../common/GameIcons';
 import {
   ResponsiveContainer,
   LineChart,
@@ -519,7 +521,7 @@ export const FacultyDashboard: React.FC = () => {
 
       {/* Navigation Tabs */}
       <div
-        className={`flex flex-wrap items-center gap-2 pb-2 border-b text-xs font-semibold ${
+        className={`flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-2 border-b text-xs font-semibold ${
           isDark ? 'border-slate-800' : 'border-slate-200'
         }`}
       >
@@ -556,7 +558,7 @@ export const FacultyDashboard: React.FC = () => {
           {/* KPI Strip (Respects Active Global Filters) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div
-              className={`p-4 rounded-xl border transition-colors ${
+              className={`p-4 rounded-xl border transition-colors interactive-card ${
                 isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-xs'
               }`}
             >
@@ -564,7 +566,7 @@ export const FacultyDashboard: React.FC = () => {
                 Daily Active Students
               </div>
               <div className="text-2xl font-bold tabular-nums">
-                {activeStudentsCount} / {cohortStudentCount}
+                <CountUp value={activeStudentsCount} /> / {cohortStudentCount}
               </div>
               <div className="text-[11px] text-emerald-500 font-semibold mt-1">
                 {cohortStudentCount > 0
@@ -575,7 +577,7 @@ export const FacultyDashboard: React.FC = () => {
             </div>
 
             <div
-              className={`p-4 rounded-xl border transition-colors ${
+              className={`p-4 rounded-xl border transition-colors interactive-card ${
                 isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-xs'
               }`}
             >
@@ -583,7 +585,7 @@ export const FacultyDashboard: React.FC = () => {
                 Average Streak Length
               </div>
               <div className="text-2xl font-bold text-orange-500 tabular-nums">
-                {avgStreak} Days
+                <CountUp value={avgStreak} suffix=" Days" />
               </div>
               <div className={`text-[11px] mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 Filtered Cohort Habit Metric
@@ -591,7 +593,7 @@ export const FacultyDashboard: React.FC = () => {
             </div>
 
             <div
-              className={`p-4 rounded-xl border transition-colors ${
+              className={`p-4 rounded-xl border transition-colors interactive-card ${
                 isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-xs'
               }`}
             >
@@ -599,7 +601,7 @@ export const FacultyDashboard: React.FC = () => {
                 Quiz Completion Rate
               </div>
               <div className="text-2xl font-bold text-indigo-500 tabular-nums">
-                {quizCompletionRate}%
+                <CountUp value={quizCompletionRate} suffix="%" />
               </div>
               <div className={`text-[11px] mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 Daily Micro-Quiz Target
@@ -607,7 +609,7 @@ export const FacultyDashboard: React.FC = () => {
             </div>
 
             <div
-              className={`p-4 rounded-xl border transition-colors ${
+              className={`p-4 rounded-xl border transition-colors interactive-card ${
                 isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-xs'
               }`}
             >
@@ -615,7 +617,7 @@ export const FacultyDashboard: React.FC = () => {
                 Quiet Students (5+ days)
               </div>
               <div className="text-2xl font-bold text-amber-500 tabular-nums">
-                {quietStudents.length}
+                <CountUp value={quietStudents.length} />
               </div>
               <div className={`text-[11px] mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 Need Re-engagement
@@ -673,8 +675,8 @@ export const FacultyDashboard: React.FC = () => {
                         fontSize: '12px',
                       }}
                     />
-                    <Bar dataKey="active" fill="#6366f1" name="Active Students" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="quizzes" fill="#10b981" name="Completed Quizzes" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="active" fill="#6366f1" name="Active Students" radius={[4, 4, 0, 0]} isAnimationActive={true} animationDuration={600} />
+                    <Bar dataKey="quizzes" fill="#10b981" name="Completed Quizzes" radius={[4, 4, 0, 0]} isAnimationActive={true} animationDuration={600} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -719,6 +721,8 @@ export const FacultyDashboard: React.FC = () => {
                       strokeWidth={3}
                       name="Average XP / Student"
                       dot={{ fill: '#f59e0b', r: 4 }}
+                      isAnimationActive={true}
+                      animationDuration={600}
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -932,7 +936,75 @@ export const FacultyDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+          {/* 1. Mobile Cards View (< 640px) */}
+          <div className="block sm:hidden space-y-3">
+            {filteredStudents.length === 0 ? (
+              <IllustratedEmptyState
+                type="no_results"
+                title="No Students Found"
+                description="No student profiles match your current campus, year, or search filters."
+                isDark={isDark}
+              />
+            ) : (
+              filteredStudents.map((s) => (
+                <div
+                  key={s.id}
+                  className={`p-4 rounded-xl border space-y-2.5 transition-colors ${
+                    isDark ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-sm text-slate-900 dark:text-white">{s.name}</div>
+                      <div className="text-[11px] font-mono text-slate-400">
+                        {s.rollNumber} · {s.campus} · {s.year}
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                      Sec {s.section}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200 dark:border-slate-800/80 text-center">
+                    <div className="p-2 rounded-lg bg-black/5 dark:bg-white/5">
+                      <div className="text-[10px] text-slate-400">Streak</div>
+                      <div className="text-xs font-bold text-orange-500 flex items-center justify-center gap-0.5 mt-0.5">
+                        <Flame className="w-3 h-3 fill-current" />
+                        <span>{s.streakDays}d</span>
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-black/5 dark:bg-white/5">
+                      <div className="text-[10px] text-slate-400">Level & XP</div>
+                      <div className="text-xs font-bold text-indigo-500 mt-0.5">
+                        Lvl {s.level} · {s.totalXp}
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-black/5 dark:bg-white/5">
+                      <div className="text-[10px] text-slate-400">Solves</div>
+                      <div className="text-xs font-bold text-emerald-500 font-mono mt-0.5">
+                        {(studentSolvedProblems[s.id] || []).length}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400">
+                    <span>Active: {s.lastActiveDate}</span>
+                    <button
+                      onClick={() => sendFacultyNudge(s.id)}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors touch-target cursor-pointer"
+                    >
+                      Send Nudge
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* 2. Tablet & Desktop Table View (>= 640px) */}
+          <div className="hidden sm:block overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
             <table className="w-full text-left text-xs">
               <thead className={`font-semibold border-b ${isDark ? 'bg-slate-950/60 border-slate-800 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
                 <tr>
@@ -949,8 +1021,13 @@ export const FacultyDashboard: React.FC = () => {
               <tbody className={`divide-y ${isDark ? 'divide-slate-800/80' : 'divide-slate-100'}`}>
                 {filteredStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-slate-400 italic">
-                      No students found matching current filters. Try resetting filters.
+                    <td colSpan={8} className="py-10">
+                      <IllustratedEmptyState
+                        type="no_results"
+                        title="No Students Found"
+                        description="No student profiles match your current campus, year, or search filters."
+                        isDark={isDark}
+                      />
                     </td>
                   </tr>
                 ) : (
@@ -1358,13 +1435,12 @@ export const FacultyDashboard: React.FC = () => {
             )}
 
             {pendingQuestions.length === 0 ? (
-              <div
-                className={`p-8 rounded-xl border text-center text-xs ${
-                  isDark ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
-                }`}
-              >
-                All caught up! No questions are currently awaiting verification in this filter view.
-              </div>
+              <IllustratedEmptyState
+                type="all_caught_up"
+                title="All Caught Up!"
+                description="No peer questions are currently awaiting faculty verification in this view."
+                isDark={isDark}
+              />
             ) : (
               <div className="space-y-3">
                 {pendingQuestions.map((q) => (
@@ -1553,13 +1629,12 @@ export const FacultyDashboard: React.FC = () => {
           )}
 
           {quietStudents.length === 0 ? (
-            <div
-              className={`p-8 rounded-xl border text-center text-xs ${
-                isDark ? 'bg-slate-950 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
-              }`}
-            >
-              🎉 Fantastic engagement! No students in this filtered group are currently inactive for 5+ days.
-            </div>
+            <IllustratedEmptyState
+              type="all_caught_up"
+              title="Fantastic Engagement!"
+              description="Zero students in this filtered group are inactive for 5+ days. Keep up the great mentorship!"
+              isDark={isDark}
+            />
           ) : (
             <div className="space-y-2">
               {quietStudents.map((s) => (
@@ -1664,7 +1739,63 @@ export const FacultyDashboard: React.FC = () => {
             <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400">
               Recent Verifiable Ledger Entries for Filtered Cohort ({cohortLedger.length})
             </h5>
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+            {/* 1. Mobile Cards (< 640px) */}
+            <div className="block sm:hidden space-y-3">
+              {cohortLedger.slice(0, 15).map((entry) => {
+                const student = students.find((s) => s.id === entry.studentId);
+                return (
+                  <div
+                    key={entry.id}
+                    className={`p-3.5 rounded-xl border space-y-2 transition-colors ${
+                      isDark ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-[10px] text-slate-400">{entry.id}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          entry.status === 'valid'
+                            ? 'bg-emerald-500/10 text-emerald-500'
+                            : 'bg-rose-500/10 text-rose-500'
+                        }`}
+                      >
+                        {entry.status.toUpperCase()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="font-bold text-xs">{student?.name || entry.studentId}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">
+                          {student?.campus} · Sec {student?.section} · {entry.actionKey}
+                        </div>
+                      </div>
+                      <div className="text-sm font-bold text-emerald-500 tabular-nums shrink-0">
+                        +{entry.points} XP
+                      </div>
+                    </div>
+
+                    {entry.status === 'valid' && (
+                      <div className="pt-1.5 border-t border-slate-200 dark:border-slate-800/80 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setVoidLedgerId(entry.id);
+                            setVoidReason('Faculty manual review flag');
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 text-rose-500 border border-rose-500/20 hover:bg-rose-500/20 touch-target cursor-pointer"
+                        >
+                          Select to Void
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 2. Tablet & Desktop Table (>= 640px) */}
+            <div className="hidden sm:block overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
               <table className="w-full text-left text-xs">
                 <thead className={`font-semibold border-b ${isDark ? 'bg-slate-950/60 border-slate-800 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
                   <tr>

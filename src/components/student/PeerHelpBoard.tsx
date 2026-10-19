@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import { useApp } from '../../store/appStore';
 import { MessageSquare, CheckCircle, Plus, Send, HelpCircle, Shield } from 'lucide-react';
 
@@ -101,8 +102,8 @@ export const PeerHelpBoard: React.FC = () => {
 
       {/* Ask Question Modal */}
       {showAskModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className={`w-full max-w-lg border rounded-2xl p-6 shadow-2xl transition-colors ${cardBg}`}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className={`w-full sm:max-w-lg border-0 sm:border rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 shadow-2xl transition-colors pb-safe ${cardBg}`}>
             <h4 className="text-base font-bold mb-4">Post a Technical Doubt</h4>
             <form onSubmit={handleCreatePost} className="space-y-4">
               <div>
@@ -110,7 +111,7 @@ export const PeerHelpBoard: React.FC = () => {
                 <select
                   value={newSubject}
                   onChange={(e) => setNewSubject(e.target.value)}
-                  className={`w-full border rounded-lg px-3 py-2 text-xs outline-hidden ${inputBg}`}
+                  className={`w-full border rounded-xl px-3 py-2.5 text-xs outline-hidden ${inputBg}`}
                 >
                   <option value="Data Structures & Algorithms">Data Structures & Algorithms</option>
                   <option value="Python Programming">Python Programming</option>
@@ -123,7 +124,7 @@ export const PeerHelpBoard: React.FC = () => {
                   type="text"
                   value={newTopic}
                   onChange={(e) => setNewTopic(e.target.value)}
-                  className={`w-full border rounded-lg px-3 py-2 text-xs outline-hidden ${inputBg}`}
+                  className={`w-full border rounded-xl px-3 py-2.5 text-xs outline-hidden ${inputBg}`}
                   placeholder="e.g. Monotonic Stack, Python MRO"
                   required
                 />
@@ -135,7 +136,7 @@ export const PeerHelpBoard: React.FC = () => {
                   type="text"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  className={`w-full border rounded-lg px-3 py-2 text-xs outline-hidden ${inputBg}`}
+                  className={`w-full border rounded-xl px-3 py-2.5 text-xs outline-hidden ${inputBg}`}
                   placeholder="What is your core confusion?"
                   required
                 />
@@ -147,23 +148,23 @@ export const PeerHelpBoard: React.FC = () => {
                   value={newBody}
                   onChange={(e) => setNewBody(e.target.value)}
                   rows={4}
-                  className={`w-full border rounded-lg px-3 py-2 text-xs outline-hidden ${inputBg}`}
+                  className={`w-full border rounded-xl px-3 py-2.5 text-xs outline-hidden ${inputBg}`}
                   placeholder="Provide context, what you tried, and expected behavior..."
                   required
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowAskModal(false)}
-                  className={`px-3.5 py-2 text-xs ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`}
+                  className={`px-4 py-2.5 text-xs rounded-xl touch-target cursor-pointer ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs"
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white rounded-xl text-xs font-semibold shadow-xs touch-target cursor-pointer"
                 >
                   Publish Doubt
                 </button>
@@ -226,8 +227,12 @@ export const PeerHelpBoard: React.FC = () => {
                       !post.isLocked;
 
                     return (
-                      <div
+                      <motion.div
+                        layout
                         key={ans.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.35, ease: 'easeOut' }}
                         className={`p-3.5 rounded-xl text-xs space-y-2 border transition-all ${
                           ans.isAccepted
                             ? isDark
@@ -241,8 +246,8 @@ export const PeerHelpBoard: React.FC = () => {
                             <span className="font-bold">{ans.authorName}</span>
                             <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>· {ans.authorCampus}</span>
                             {ans.isAccepted && (
-                              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                                <CheckCircle className="w-3 h-3 text-emerald-500" /> Accepted Answer (+15 XP Awarded)
+                              <span className="text-[10px] font-extrabold uppercase tracking-wide text-emerald-700 dark:text-emerald-300 bg-emerald-500/20 border-2 border-emerald-500 px-2.5 py-0.5 rounded-md flex items-center gap-1 shadow-xs animate-stamp">
+                                <CheckCircle className="w-3 h-3 text-emerald-500" /> Accepted (+15 XP)
                               </span>
                             )}
                           </div>
@@ -255,14 +260,14 @@ export const PeerHelpBoard: React.FC = () => {
                           <div className="pt-2 flex justify-end">
                             <button
                               onClick={() => handleAcceptAnswer(post.id, ans.id)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer pressable-btn"
                             >
                               <CheckCircle className="w-3.5 h-3.5" />
                               <span>Accept Answer (Award +15 XP)</span>
                             </button>
                           </div>
                         )}
-                      </div>
+                      </motion.div>
                     );
                   })}
 

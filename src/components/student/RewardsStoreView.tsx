@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../../store/appStore';
 import { Coins, Coffee, Shirt, Headphones, Users, CheckCircle2, AlertCircle } from 'lucide-react';
+import { CountUp } from '../common/CountUp';
 
 export const RewardsStoreView: React.FC = () => {
   const { activeStudent, rewardItems, redemptions, redeemReward, isDark } = useApp();
   const [feedback, setFeedback] = useState<{ success: boolean; message: string } | null>(null);
+  const [recentRedeemedId, setRecentRedeemedId] = useState<string | null>(null);
 
   const getRewardIcon = (iconName: string) => {
     switch (iconName) {
@@ -19,6 +22,10 @@ export const RewardsStoreView: React.FC = () => {
   const handleRedeem = (id: string) => {
     const res = redeemReward(id);
     setFeedback(res);
+    if (res.success) {
+      setRecentRedeemedId(id);
+      setTimeout(() => setRecentRedeemedId(null), 1500);
+    }
   };
 
   const cardBg = isDark
@@ -31,14 +38,14 @@ export const RewardsStoreView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Coins Balance Banner */}
-      <div className={`p-6 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors ${
+      <div className={`p-6 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors interactive-card ${
         isDark
           ? 'bg-gradient-to-r from-amber-950/30 via-slate-900 to-slate-900 border-slate-800 text-white'
           : 'bg-gradient-to-r from-amber-50/80 via-white to-amber-50/30 border-amber-200 text-slate-900 shadow-xs'
       }`}>
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-amber-500 mb-1">
-            <Coins className="w-4 h-4" />
+            <Coins className="w-4 h-4 animate-bounce" />
             <span>SEPARATE REWARDS ECONOMY</span>
           </div>
           <h3 className="text-xl font-bold">MSOT Campus Perks Store</h3>
@@ -52,7 +59,7 @@ export const RewardsStoreView: React.FC = () => {
         }`}>
           <div className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Available Coins</div>
           <div className="text-3xl font-extrabold text-amber-500 tabular-nums">
-            {activeStudent.coinsBalance}
+            <CountUp value={activeStudent.coinsBalance} />
           </div>
         </div>
       </div>
@@ -75,16 +82,34 @@ export const RewardsStoreView: React.FC = () => {
       )}
 
       {/* Rewards Catalog */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {rewardItems.map((item) => {
           const canAfford = activeStudent.coinsBalance >= item.costCoins;
           const inStock = item.stock > 0;
+          const isRedeemedJustNow = recentRedeemedId === item.id;
 
           return (
             <div
               key={item.id}
-              className={`p-5 rounded-2xl border flex flex-col justify-between transition-colors ${cardBg}`}
+              className={`relative p-4 sm:p-5 rounded-2xl border flex flex-col justify-between transition-all interactive-card overflow-hidden ${cardBg}`}
             >
+              <AnimatePresence>
+                {isRedeemedJustNow && (
+                  <motion.div
+                    initial={{ y: -24, opacity: 0, scale: 0.6 }}
+                    animate={{ y: 0, opacity: 1, scale: 1 }}
+                    exit={{ y: 16, opacity: 0 }}
+                    transition={{ type: 'spring', damping: 14, stiffness: 250 }}
+                    className="absolute inset-0 bg-amber-500/20 backdrop-blur-xs flex flex-col items-center justify-center z-10 text-amber-500 font-bold"
+                  >
+                    <Coins className="w-9 h-9 animate-coin-drop mb-1 text-amber-400" />
+                    <span className="text-xs bg-slate-950/90 text-amber-300 px-2.5 py-1 rounded-full border border-amber-400/40 shadow-lg">
+                      -{item.costCoins} Coins!
+                    </span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <div>
                 <div className={`w-12 h-12 rounded-xl border flex items-center justify-center mb-3 ${subCardBg}`}>
                   {getRewardIcon(item.icon)}
@@ -110,7 +135,7 @@ export const RewardsStoreView: React.FC = () => {
                 <button
                   onClick={() => handleRedeem(item.id)}
                   disabled={!canAfford || !inStock}
-                  className={`w-full py-2 rounded-xl text-xs font-semibold transition-colors ${
+                  className={`w-full py-2.5 rounded-xl text-xs font-semibold transition-colors touch-target cursor-pointer pressable-btn ${
                     canAfford && inStock
                       ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-xs'
                       : isDark

@@ -10,6 +10,10 @@ import { StudentAssignmentsView } from './StudentAssignmentsView';
 import { PeerHelpBoard } from './PeerHelpBoard';
 import { RewardsStoreView } from './RewardsStoreView';
 import { BossBattleModal } from './BossBattleModal';
+import { CountUp } from '../common/CountUp';
+import { StreakFlame, getStreakTier } from '../common/StreakFlame';
+import { StreakMilestoneModal } from './StreakMilestoneModal';
+import { GameStatBadge, LeagueEmblem } from '../common/GameIcons';
 import {
   Flame,
   Snowflake,
@@ -28,10 +32,9 @@ import {
   FileText,
   User,
   Shield,
-  Eye,
-  EyeOff,
   Building2,
   ExternalLink,
+  Globe,
 } from 'lucide-react';
 
 export const StudentDashboard: React.FC = () => {
@@ -43,9 +46,8 @@ export const StudentDashboard: React.FC = () => {
     isDark,
     navSection,
     setNavSection,
-    toggleAnonymousMode,
-    toggleOptOutOfLeaderboards,
     openProfileModal,
+    updateStudentProfile,
   } = useApp();
 
   const [activeSubTab, setActiveSubTab] = useState<
@@ -65,17 +67,31 @@ export const StudentDashboard: React.FC = () => {
   const [showQuizModal, setShowQuizModal] = useState(false);
   const [showBossModal, setShowBossModal] = useState(false);
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+  const [freezeEffectActive, setFreezeEffectActive] = useState(false);
 
   // Framer Motion streak animation triggers
   const [streakAnimKey, setStreakAnimKey] = useState<number>(0);
   const [showStreakBonusPop, setShowStreakBonusPop] = useState(false);
+  const [milestoneCelebrationDays, setMilestoneCelebrationDays] = useState<number | null>(null);
   const prevStreakRef = useRef(activeStudent.streakDays);
+
+  // Check if student completed today's action
+  const todayDateStr = new Date().toISOString().split('T')[0];
+  const isTodayActivityDone = activeStudent.streakCalendar.includes(todayDateStr);
+  const isStreakAtRisk = !isTodayActivityDone && activeStudent.streakDays > 0;
 
   useEffect(() => {
     if (activeStudent.streakDays !== prevStreakRef.current) {
+      const oldVal = prevStreakRef.current;
       prevStreakRef.current = activeStudent.streakDays;
       setStreakAnimKey((k) => k + 1);
       setShowStreakBonusPop(true);
+
+      // Check if student hit milestone 7, 14, 30, or 100 days
+      if ([7, 14, 30, 100].includes(activeStudent.streakDays) && activeStudent.streakDays > oldVal) {
+        setMilestoneCelebrationDays(activeStudent.streakDays);
+      }
+
       const timer = setTimeout(() => setShowStreakBonusPop(false), 2400);
       return () => clearTimeout(timer);
     }
@@ -140,6 +156,8 @@ export const StudentDashboard: React.FC = () => {
   const handleUseFreeze = () => {
     const success = useStreakFreeze(activeStudent.id);
     if (success) {
+      setFreezeEffectActive(true);
+      setTimeout(() => setFreezeEffectActive(false), 2400);
       setFeedbackToast(`Streak freeze applied! 1 freeze consumed to protect streak history.`);
     } else {
       setFeedbackToast(`No streak freezes remaining this month.`);
@@ -172,36 +190,42 @@ export const StudentDashboard: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Toast */}
-      {feedbackToast && (
-        <div
-          className={`fixed bottom-6 right-6 z-50 p-4 rounded-xl border text-xs shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150 ${
-            isDark
-              ? 'bg-slate-900 border-emerald-500/40 text-emerald-300'
-              : 'bg-white border-emerald-500/60 text-emerald-800 shadow-xl'
-          }`}
-        >
-          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-          <span>{feedbackToast}</span>
-        </div>
-      )}
+      <AnimatePresence>
+        {feedbackToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className={`fixed bottom-6 right-6 z-50 p-4 rounded-xl border text-xs shadow-2xl flex items-center gap-2 ${
+              isDark
+                ? 'bg-slate-900 border-emerald-500/40 text-emerald-300'
+                : 'bg-white border-emerald-500/60 text-emerald-800 shadow-xl'
+            }`}
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span>{feedbackToast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Hero Profile & Progression Card */}
       <div
-        className={`p-6 rounded-2xl border transition-colors ${
+        className={`p-4 sm:p-6 rounded-2xl border transition-colors interactive-card ${
           isDark
             ? 'bg-slate-900 border-slate-800 text-slate-100'
             : 'bg-gradient-to-br from-indigo-50/80 via-white to-slate-50 border-slate-200 text-slate-900 shadow-xs'
         }`}
       >
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          {/* Left Column: Student Details */}
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 sm:gap-6">
+          {/* Left Column: Student Details (Avatar stacks above details on mobile) */}
+          <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-3.5 sm:gap-4">
             <button
               onClick={() => openProfileModal(activeStudent.id, 'student', 'profile')}
               title="Click to view & edit profile"
-              className="relative shrink-0 group cursor-pointer"
+              className="relative shrink-0 group cursor-pointer touch-target flex items-center justify-center"
             >
-              <div className="w-16 h-16 rounded-2xl bg-indigo-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-indigo-600/30 group-hover:scale-105 transition-transform">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-indigo-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-indigo-600/30 group-hover:scale-105 transition-transform">
                 {activeStudent.name.charAt(0)}
               </div>
               <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-md bg-emerald-500 text-[10px] font-extrabold text-white shadow-xs">
@@ -209,108 +233,124 @@ export const StudentDashboard: React.FC = () => {
               </span>
             </button>
 
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="min-w-0">
+              <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
                 <button
                   onClick={() => openProfileModal(activeStudent.id, 'student', 'profile')}
-                  className="text-xl font-bold tracking-tight text-left hover:text-indigo-500 transition-colors cursor-pointer group flex items-center gap-1.5"
+                  className="text-lg sm:text-xl font-bold tracking-tight text-center sm:text-left hover:text-indigo-500 transition-colors cursor-pointer group flex items-center gap-1.5"
                   title="Click to open student profile"
                 >
-                  <span>{activeStudent.name}</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500 opacity-60 group-hover:opacity-100 transition-all" />
+                  <span className="truncate max-w-[240px] sm:max-w-none">{activeStudent.name}</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500 opacity-60 group-hover:opacity-100 transition-all shrink-0" />
                 </button>
-                {activeStudent.isAnonymous && (
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
-                      isDark ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-300 text-slate-700'
-                    }`}
-                  >
-                    @{activeStudent.anonymousNickname} (Anon Mode)
-                  </span>
-                )}
               </div>
 
-              <div className={`text-xs mt-1 flex items-center gap-2 flex-wrap ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              <div className={`text-xs mt-1 flex items-center justify-center sm:justify-start gap-2 flex-wrap ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 <span className="flex items-center gap-1 font-medium">
-                  <Building2 className="w-3.5 h-3.5 text-indigo-500" />
+                  <Building2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                   {activeStudent.campus} Campus
                 </span>
                 <span>·</span>
                 <span>Section {activeStudent.section}</span>
                 <span>·</span>
-                <span>Roll: {activeStudent.rollNumber}</span>
+                <span className="font-mono text-[11px]">Roll: {activeStudent.rollNumber}</span>
               </div>
             </div>
           </div>
 
-          {/* Right Column: 4 Stat Tiles (Streak, League, Total XP, Perks Coins) */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Right Column: 4 Stat Tiles (2 cols on mobile, 4 on tablet/laptop) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 w-full lg:w-auto">
             {/* 1. Streak Tile */}
             <motion.div
+              onClick={() => {
+                if (activeStudent.streakDays >= 7) {
+                  setMilestoneCelebrationDays(activeStudent.streakDays);
+                }
+              }}
               animate={
                 streakAnimKey > 0
                   ? {
-                      scale: [1, 1.03, 1],
+                      scale: [1, 1.05, 1],
                       boxShadow: [
                         '0 0 0px rgba(249, 115, 22, 0)',
-                        '0 0 20px rgba(249, 115, 22, 0.35)',
+                        '0 0 24px rgba(249, 115, 22, 0.45)',
                         '0 0 0px rgba(249, 115, 22, 0)',
                       ],
                     }
                   : { scale: 1 }
               }
               transition={{ type: 'tween', duration: 0.5, ease: 'easeInOut' }}
-              className={`relative p-3.5 rounded-xl border flex flex-col justify-between overflow-hidden transition-colors ${
-                isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200 shadow-2xs'
+              className={`relative p-3 sm:p-3.5 rounded-2xl border flex flex-col justify-between overflow-hidden transition-colors cursor-pointer select-none ${
+                isDark ? 'bg-slate-950 border-slate-800 hover:border-orange-500/40' : 'bg-white border-slate-200 shadow-2xs hover:border-orange-300'
               }`}
+              title="Click to view streak tier and milestone progress"
             >
               <AnimatePresence>
                 {showStreakBonusPop && (
                   <motion.div
-                    initial={{ opacity: 0, y: 6, scale: 0.9 }}
+                    initial={{ opacity: 0, y: 6, scale: 0.8 }}
                     animate={{ opacity: 1, y: -2, scale: 1 }}
-                    exit={{ opacity: 0, y: -10, scale: 0.9 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.8 }}
                     transition={{ type: 'tween', duration: 0.35, ease: 'easeOut' }}
-                    className="absolute top-1 right-2 px-1.5 py-0.5 rounded bg-orange-500/20 border border-orange-500/50 text-orange-600 dark:text-orange-300 text-[9px] font-bold z-10 flex items-center gap-0.5 shadow-xs"
+                    className="absolute top-1 right-2 px-1.5 py-0.5 rounded-full bg-orange-500/25 border border-orange-500/60 text-orange-400 text-[9px] font-black z-10 flex items-center gap-1 shadow-sm"
                   >
-                    <span>🔥 Streak Active!</span>
+                    <Sparkles className="w-2.5 h-2.5 text-orange-300" />
+                    <span>Streak Up!</span>
                   </motion.div>
                 )}
               </AnimatePresence>
 
               <div className="flex items-center justify-between text-xs mb-1.5">
-                <div className="flex items-center gap-1.5 text-orange-500 font-semibold">
-                  <Flame className="w-4 h-4 fill-orange-500 text-orange-500" />
-                  <span>Streak</span>
+                <div className="flex items-center gap-2">
+                  <StreakFlame
+                    streakDays={activeStudent.streakDays}
+                    size="xs"
+                    isAtRisk={isStreakAtRisk}
+                    isFrozen={freezeEffectActive}
+                    isBursting={showStreakBonusPop}
+                  />
+                  <span className="font-extrabold text-orange-500 text-xs">
+                    {getStreakTier(activeStudent.streakDays).name}
+                  </span>
                 </div>
 
-                <span className="text-[10px] text-blue-600 dark:text-blue-300 flex items-center gap-0.5 font-medium">
-                  <Snowflake className="w-3 h-3 text-blue-500" /> {activeStudent.streakFreezesRemaining} Freezes
+                <span className="text-[10px] text-blue-400 flex items-center gap-0.5 font-bold">
+                  <Snowflake className={`w-3 h-3 ${freezeEffectActive ? 'animate-spin' : ''}`} />
+                  <span>{activeStudent.streakFreezesRemaining}</span>
                 </span>
               </div>
 
-              <div className="overflow-hidden">
-                <div className="text-xl font-extrabold tabular-nums flex items-baseline gap-1">
-                  <span className="text-orange-500">{activeStudent.streakDays}</span>
+              <div className="flex items-baseline justify-between overflow-hidden mt-1">
+                <div className="text-xl sm:text-2xl font-black tabular-nums flex items-baseline gap-1">
+                  <span className="text-orange-500">
+                    <CountUp value={activeStudent.streakDays} />
+                  </span>
                   <span className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Days</span>
                 </div>
+                {isStreakAtRisk && (
+                  <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider animate-pulse">
+                    At Risk
+                  </span>
+                )}
               </div>
             </motion.div>
 
             {/* 2. League Rank */}
             <div
-              className={`p-3.5 rounded-xl border flex flex-col justify-between transition-colors ${
+              className={`p-3 sm:p-3.5 rounded-2xl border flex flex-col justify-between transition-colors interactive-card ${
                 isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200 shadow-2xs'
               }`}
             >
-              <div className="flex items-center justify-between text-xs mb-1.5">
-                <span className="flex items-center gap-1 text-amber-500 font-semibold">
-                  <Trophy className="w-3.5 h-3.5" /> League
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="flex items-center gap-1.5 text-amber-500 font-bold truncate">
+                  <GameStatBadge stat="league" size="sm" />
+                  <span>League</span>
                 </span>
+                <LeagueEmblem league={activeStudent.league} size="sm" />
               </div>
-              <div className="text-xl font-extrabold tabular-nums flex items-baseline gap-1.5">
-                <span className={isDark ? 'text-white' : 'text-slate-900'}>{activeStudent.league}</span>
-                <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              <div className="text-lg sm:text-xl font-extrabold tabular-nums flex items-baseline gap-1.5 mt-1">
+                <span className={`truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{activeStudent.league}</span>
+                <span className={`text-xs font-medium shrink-0 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   #{activeStudent.leagueRank}
                 </span>
               </div>
@@ -318,49 +358,51 @@ export const StudentDashboard: React.FC = () => {
 
             {/* 3. Total Academic XP */}
             <div
-              className={`p-3.5 rounded-xl border flex flex-col justify-between transition-colors ${
+              className={`p-3 sm:p-3.5 rounded-2xl border flex flex-col justify-between transition-colors interactive-card ${
                 isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200 shadow-2xs'
               }`}
             >
-              <div className="text-xs mb-1 font-semibold text-emerald-600 dark:text-emerald-400">
-                Total Academic XP
+              <div className="flex items-center gap-1.5 text-xs mb-1 font-bold text-emerald-400 truncate">
+                <GameStatBadge stat="xp" size="sm" />
+                <span>Academic XP</span>
               </div>
-              <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                {activeStudent.totalXp} XP
+              <div className="text-lg sm:text-xl font-extrabold text-emerald-400 tabular-nums mt-1">
+                <CountUp value={activeStudent.totalXp} suffix=" XP" />
               </div>
             </div>
 
             {/* 4. Separate Coins Balance */}
             <div
-              className={`p-3.5 rounded-xl border flex flex-col justify-between transition-colors ${
+              className={`p-3 sm:p-3.5 rounded-2xl border flex flex-col justify-between transition-colors interactive-card ${
                 isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200 shadow-2xs'
               }`}
             >
-              <div className="text-xs mb-1 font-semibold text-amber-500 flex items-center gap-1">
-                <Coins className="w-3.5 h-3.5" /> Perks Coins
+              <div className="flex items-center gap-1.5 text-xs mb-1 font-bold text-amber-400 truncate">
+                <GameStatBadge stat="coins" size="sm" />
+                <span>Perks Coins</span>
               </div>
-              <div className="text-xl font-extrabold text-amber-500 tabular-nums">
-                {activeStudent.coinsBalance}
+              <div className="text-lg sm:text-xl font-extrabold text-amber-400 tabular-nums mt-1">
+                <CountUp value={activeStudent.coinsBalance} />
               </div>
             </div>
           </div>
         </div>
 
         {/* Level Progression Progress Bar */}
-        <div className={`mt-5 pt-5 border-t ${isDark ? 'border-slate-800/80' : 'border-slate-200'}`}>
-          <div className="flex items-center justify-between text-xs mb-2">
-            <div className="flex items-center gap-2">
+        <div className={`mt-4 sm:mt-5 pt-4 sm:pt-5 border-t ${isDark ? 'border-slate-800/80' : 'border-slate-200'}`}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs mb-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <span className={`font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 Level {level} Scholar
               </span>
               <span className="text-slate-400">·</span>
-              <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                Curve: XP(L) = 100·(L-1)^1.45 + 50·(L-1)
+              <span className={`text-[10px] sm:text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                XP(L) = 100·(L-1)^1.45 + 50·(L-1)
               </span>
             </div>
 
-            <div className={`font-semibold tabular-nums ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-              {currentLevelXp} / {nextLevelXp} XP to Level {level + 1} ({progressPercent}%)
+            <div className={`font-semibold tabular-nums text-xs ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+              <CountUp value={currentLevelXp} /> / {nextLevelXp} XP ({progressPercent}%)
             </div>
           </div>
 
@@ -369,17 +411,19 @@ export const StudentDashboard: React.FC = () => {
               isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
             }`}
           >
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-indigo-400 to-emerald-400 transition-all duration-700"
-              style={{ width: `${progressPercent}%` }}
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${progressPercent}%` }}
+              transition={{ duration: 0.8, ease: 'easeOut' }}
+              className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-indigo-400 to-emerald-400"
             />
           </div>
         </div>
       </div>
 
-      {/* Sub-Navigation Tabs (Wrapped gracefully so nothing is ever horizontally cut off) */}
+      {/* Sub-Navigation Tabs: Horizontal Scrollable Chip Row on Mobile, Flex on Desktop */}
       <div
-        className={`flex flex-wrap items-center gap-2 pb-2 border-b text-xs font-semibold ${
+        className={`flex items-center gap-1.5 sm:gap-2 pb-2 border-b text-xs font-semibold overflow-x-auto no-scrollbar scroll-smooth -mx-3 px-3 sm:mx-0 sm:px-0 sm:flex-wrap ${
           isDark ? 'border-slate-800' : 'border-slate-200'
         }`}
       >
@@ -388,7 +432,7 @@ export const StudentDashboard: React.FC = () => {
           { id: 'assignments', label: 'Coursework & Labs', icon: FileText },
           { id: 'ledger', label: 'Verifiable Ledger', icon: ShieldCheck },
           { id: 'badges', label: 'Badges & Quests', icon: Sparkles },
-          { id: 'coding', label: 'Coding Practice (16 Topics)', icon: Code },
+          { id: 'coding', label: 'Coding Practice', icon: Code },
           { id: 'peer_help', label: 'Peer Doubts', icon: Users },
           { id: 'store', label: 'Perks Store', icon: ShoppingBag },
           { id: 'profile', label: 'Profile & Settings', icon: User },
@@ -399,7 +443,7 @@ export const StudentDashboard: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => handleSubTabClick(tab.id as any)}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl transition-all cursor-pointer whitespace-nowrap shrink-0 touch-target ${
                 isActive
                   ? 'bg-indigo-600 text-white font-bold shadow-xs shadow-indigo-600/30'
                   : isDark
@@ -421,14 +465,14 @@ export const StudentDashboard: React.FC = () => {
           <div className="lg:col-span-2 space-y-6">
             {/* Daily Streak Calendar (14-day Habit Tracker) */}
             <div
-              className={`p-5 rounded-2xl border transition-colors ${
+              className={`p-4 sm:p-5 rounded-2xl border transition-colors ${
                 isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-xs'
               }`}
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3.5">
                 <div>
                   <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-orange-500">
-                    <Calendar className="w-4 h-4" />
+                    <Calendar className="w-4 h-4 shrink-0" />
                     <span>Learning Habit Tracker (Last 14 Days)</span>
                   </h4>
                   <div className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -439,39 +483,63 @@ export const StudentDashboard: React.FC = () => {
                 {activeStudent.streakFreezesRemaining > 0 && (
                   <button
                     onClick={handleUseFreeze}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-300 text-xs font-semibold hover:bg-blue-500/20 transition-colors shrink-0 cursor-pointer"
+                    className="flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-300 text-xs font-semibold hover:bg-blue-500/20 transition-colors shrink-0 cursor-pointer touch-target self-start sm:self-auto"
                   >
-                    <Snowflake className="w-3.5 h-3.5" />
+                    <Snowflake className={`w-3.5 h-3.5 ${freezeEffectActive ? 'animate-spin' : ''}`} />
                     <span>Protect with Freeze</span>
                   </button>
                 )}
               </div>
 
-              <div className="grid grid-cols-7 sm:grid-cols-14 gap-1.5">
-                {calendarDays.map((day, idx) => (
-                  <div
-                    key={idx}
-                    className={`p-2 rounded-xl text-center border transition-all ${
-                      day.isCompleted
-                        ? isDark
-                          ? 'bg-orange-500/10 border-orange-500/40 text-orange-300 font-bold'
-                          : 'bg-orange-50 border-orange-300 text-orange-800 font-bold shadow-2xs'
-                        : isDark
-                        ? 'bg-slate-950 border-slate-800/80 text-slate-500'
-                        : 'bg-slate-100/80 border-slate-200 text-slate-500'
-                    } ${day.isToday ? 'ring-2 ring-indigo-500/60' : ''}`}
-                  >
-                    <div className="text-[10px] opacity-75">{day.dayName}</div>
-                    <div className="text-xs font-bold tabular-nums mt-0.5">{day.dayNum}</div>
-                    <div className="mt-1 text-center">
-                      {day.isCompleted ? (
-                        <Flame className="w-3.5 h-3.5 text-orange-500 mx-auto fill-current" />
-                      ) : (
-                        <span className={`w-1.5 h-1.5 rounded-full inline-block ${isDark ? 'bg-slate-800' : 'bg-slate-300'}`} />
-                      )}
-                    </div>
-                  </div>
-                ))}
+              {/* 14 Day Habit Grid: 7 cols on mobile, 14 cols on tablet/desktop */}
+              <div
+                className={`grid grid-cols-7 sm:grid-cols-14 gap-1.5 rounded-2xl transition-all ${
+                  freezeEffectActive ? 'ring-2 ring-blue-400/80 p-1.5 bg-blue-500/10 animate-frost' : ''
+                }`}
+              >
+                {calendarDays.map((day, idx) => {
+                  const isCellIgniting = day.isToday && showStreakBonusPop && day.isCompleted;
+
+                  return (
+                    <motion.div
+                      key={day.dateStr}
+                      initial={{ opacity: 0, y: 8, scale: 0.85 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ delay: idx * 0.035, duration: 0.25, ease: 'easeOut' }}
+                      className={`p-2 rounded-xl text-center border transition-all relative overflow-hidden select-none ${
+                        isCellIgniting
+                          ? 'animate-fire-fill bg-gradient-to-t from-orange-500 via-amber-500 to-orange-400 text-white font-black shadow-md border-orange-400'
+                          : day.isCompleted
+                          ? isDark
+                            ? 'bg-orange-500/10 border-orange-500/40 text-orange-300 font-bold'
+                            : 'bg-orange-50 border-orange-300 text-orange-800 font-bold shadow-2xs'
+                          : isDark
+                          ? 'bg-slate-950 border-slate-800/80 text-slate-500'
+                          : 'bg-slate-100/80 border-slate-200 text-slate-500'
+                      } ${day.isToday ? 'ring-2 ring-indigo-500/80 shadow-sm' : ''}`}
+                    >
+                      <div className="text-[10px] opacity-75">{day.dayName}</div>
+                      <div className="text-xs font-black tabular-nums mt-0.5">{day.dayNum}</div>
+                      <div className="mt-1 flex items-center justify-center min-h-[22px]">
+                        {day.isCompleted ? (
+                          <StreakFlame
+                            streakDays={activeStudent.streakDays}
+                            size="xs"
+                            isFrozen={day.isToday && freezeEffectActive}
+                          />
+                        ) : day.isToday && freezeEffectActive ? (
+                          <Snowflake className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                        ) : (
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full inline-block ${
+                              isDark ? 'bg-slate-800' : 'bg-slate-300'
+                            }`}
+                          />
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
             </div>
 
@@ -722,7 +790,7 @@ export const StudentDashboard: React.FC = () => {
               { id: 'profile', label: 'Personal Details', desc: 'Name, Bio, Skills & Tags' },
               { id: 'batchmates', label: 'Batchmates', desc: 'Same Campus & Section Only' },
               { id: 'social', label: 'Social Handles', desc: 'GitHub, LinkedIn, LeetCode' },
-              { id: 'privacy', label: 'Privacy Controls', desc: 'Anon & Leaderboard Toggles' },
+              { id: 'privacy', label: 'Privacy & Sharing', desc: 'Social Links & Cohort Isolation' },
             ].map((t) => (
               <button
                 key={t.id}
@@ -740,60 +808,57 @@ export const StudentDashboard: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Anonymous Mode Card */}
+            {/* Social Links Sharing Card */}
             <div
               className={`p-4 rounded-xl border flex items-start justify-between gap-4 transition-colors ${
                 isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
               }`}
             >
               <div>
-                <div className="flex items-center gap-2 font-bold text-xs">
-                  {activeStudent.isAnonymous ? <EyeOff className="w-4 h-4 text-amber-500" /> : <Eye className="w-4 h-4 text-emerald-500" />}
-                  <span>Anonymous Alias Mode</span>
+                <div className="flex items-center gap-2 font-bold text-xs text-blue-500">
+                  <Globe className="w-4 h-4" />
+                  <span>Share Social Links with Batch</span>
                 </div>
                 <p className={`text-xs mt-1 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                  Shows your nickname (<span className="font-mono text-indigo-500">@{activeStudent.anonymousNickname}</span>) on leaderboards instead of your real name.
+                  Control whether classmates in your section can view your GitHub, LinkedIn, and LeetCode handles.
                 </p>
               </div>
 
               <button
-                onClick={() => toggleAnonymousMode(activeStudent.id)}
+                onClick={() =>
+                  updateStudentProfile(activeStudent.id, {
+                    shareSocialLinksWithBatchmates: !activeStudent.shareSocialLinksWithBatchmates,
+                  })
+                }
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                  activeStudent.isAnonymous
-                    ? 'bg-amber-500 text-slate-950 shadow-xs'
-                    : 'bg-indigo-600 text-white shadow-xs'
+                  activeStudent.shareSocialLinksWithBatchmates
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                 }`}
               >
-                {activeStudent.isAnonymous ? 'Enabled' : 'Enable'}
+                {activeStudent.shareSocialLinksWithBatchmates ? 'Shared' : 'Private'}
               </button>
             </div>
 
-            {/* Leaderboard Opt-out */}
+            {/* Cohort Privacy Guarantee Card */}
             <div
               className={`p-4 rounded-xl border flex items-start justify-between gap-4 transition-colors ${
                 isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
               }`}
             >
               <div>
-                <div className="flex items-center gap-2 font-bold text-xs">
-                  <Shield className="w-4 h-4 text-indigo-500" />
-                  <span>Leaderboard Opt-Out</span>
+                <div className="flex items-center gap-2 font-bold text-xs text-indigo-500">
+                  <Shield className="w-4 h-4" />
+                  <span>Strict Cohort Privacy</span>
                 </div>
                 <p className={`text-xs mt-1 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                  Hide your position from public leagues while still earning verified academic XP.
+                  Students only see rankings and batchmates from their same campus, academic year, and section. Phone numbers are never exposed.
                 </p>
               </div>
 
-              <button
-                onClick={() => toggleOptOutOfLeaderboards(activeStudent.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                  activeStudent.optOutOfLeaderboards
-                    ? 'bg-rose-500 text-white'
-                    : 'bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200'
-                }`}
-              >
-                {activeStudent.optOutOfLeaderboards ? 'Opted Out' : 'Active In Ranks'}
-              </button>
+              <div className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-indigo-500/10 text-indigo-500 border border-indigo-500/30 shrink-0">
+                Protected
+              </div>
             </div>
           </div>
         </div>
@@ -804,6 +869,17 @@ export const StudentDashboard: React.FC = () => {
 
       {/* Boss Battle Modal */}
       <BossBattleModal isOpen={showBossModal} onClose={() => setShowBossModal(false)} />
+
+      {/* Streak Milestone Celebration Modal */}
+      {milestoneCelebrationDays !== null && (
+        <StreakMilestoneModal
+          isOpen={milestoneCelebrationDays !== null}
+          onClose={() => setMilestoneCelebrationDays(null)}
+          milestoneDays={milestoneCelebrationDays}
+          bonusXp={milestoneCelebrationDays * 10}
+          isDark={isDark}
+        />
+      )}
     </div>
   );
 };

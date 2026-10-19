@@ -1,8 +1,10 @@
 import React, { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useApp } from '../../store/appStore';
 import { CODING_TOPICS, TopicMetadata } from '../../data/codingPracticeCatalog';
 import { runProblemCode, RunSummary } from '../../modules/codeRunner';
 import { SupportedLanguage, getLanguageStarter } from '../../data/codingProblems';
+import { fireConfetti } from '../../utils/confetti';
 import {
   Code,
   CheckCircle2,
@@ -36,7 +38,9 @@ import {
   RefreshCw,
   ExternalLink,
   Flame,
+  BookOpen,
 } from 'lucide-react';
+import { IllustratedEmptyState } from '../common/GameIcons';
 
 const TOPIC_ICON_MAP: Record<string, React.ElementType> = {
   arrays: LayoutGrid,
@@ -91,6 +95,7 @@ export const CodingPracticeView: React.FC = () => {
   const [showHints, setShowHints] = useState<boolean>(false);
   const [feedbackToast, setFeedbackToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [generatingTopicId, setGeneratingTopicId] = useState<string | null>(null);
+  const [mobileTab, setMobileTab] = useState<'problem' | 'code' | 'output'>('code');
 
   const activeProblem = useMemo(() => {
     return allCodingProblems.find((p) => p.id === activeProblemId) || allCodingProblems[0];
@@ -178,6 +183,7 @@ export const CodingPracticeView: React.FC = () => {
     if (!activeProblem) return;
     setIsRunning(true);
     setRunSummary(null);
+    setMobileTab('output');
 
     try {
       const summary = await runProblemCode(activeProblem, userCode, selectedLanguage);
@@ -208,6 +214,7 @@ export const CodingPracticeView: React.FC = () => {
   const handleSubmitSolution = async () => {
     if (!activeProblem) return;
     setIsSubmitting(true);
+    setMobileTab('output');
 
     try {
       const summary = await runProblemCode(activeProblem, userCode, selectedLanguage);
@@ -225,6 +232,7 @@ export const CodingPracticeView: React.FC = () => {
       // Claim verified solve XP
       const res = solveCodingProblem(activeStudent.id, activeProblem.id);
       if (res.success) {
+        fireConfetti();
         setFeedbackToast({
           message: res.message,
           type: 'success',
@@ -408,16 +416,19 @@ export const CodingPracticeView: React.FC = () => {
           )}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
-          {topicStats.map((topic) => {
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {topicStats.map((topic, idx) => {
             const Icon = TOPIC_ICON_MAP[topic.id] || Code;
             const isSelected = selectedTopicId === topic.id;
 
             return (
-              <div
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.02, duration: 0.2 }}
                 key={topic.id}
                 onClick={() => setSelectedTopicId(isSelected ? 'all' : topic.id)}
-                className={`relative p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col justify-between ${
+                className={`relative p-3.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col justify-between interactive-card ${
                   isSelected
                     ? 'border-indigo-600 bg-indigo-500/10 ring-2 ring-indigo-500/30'
                     : isDark
@@ -426,28 +437,28 @@ export const CodingPracticeView: React.FC = () => {
                 }`}
               >
                 <div>
-                  <div className="mx-auto w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 mb-2">
+                  <div className="mx-auto w-9 h-9 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 mb-2">
                     <Icon className="w-4 h-4" />
                   </div>
                   <div className="text-xs font-bold truncate leading-tight">{topic.name}</div>
                   <div className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    {topic.solvedCount} / {topic.totalCount}
+                    {topic.solvedCount} / {topic.totalCount} problems solved
                   </div>
                 </div>
 
                 {/* Progress bar */}
-                <div className="mt-2">
+                <div className="mt-2.5">
                   <div className={`w-full h-1.5 rounded-full overflow-hidden ${isDark ? 'bg-slate-950' : 'bg-slate-100'}`}>
                     <div
                       className="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 transition-all duration-500"
                       style={{ width: `${topic.percentage}%` }}
                     />
                   </div>
-                  <div className="text-[9px] font-bold text-emerald-500 mt-1 tabular-nums">
-                    {topic.percentage}%
+                  <div className="text-[10px] font-bold text-emerald-500 mt-1 tabular-nums">
+                    {topic.percentage}% Mastered
                   </div>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -530,104 +541,13 @@ export const CodingPracticeView: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Two-Pane View: Problem List (Left) + Sandboxed Code Compiler (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Pane: Question List (5 columns) */}
-        <div className="lg:col-span-5 space-y-2">
-          <div className="flex items-center justify-between text-xs font-semibold px-1">
-            <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>
-              Showing {filteredProblems.length} Problems
-            </span>
-            <span className="text-indigo-500 font-bold">
-              Topic: {selectedTopicId === 'all' ? 'All Topics' : selectedTopicId.toUpperCase()}
-            </span>
-          </div>
-
-          <div className="space-y-2 max-h-[640px] overflow-y-auto pr-1">
-            {filteredProblems.length === 0 ? (
-              <div
-                className={`p-8 rounded-xl border text-center ${
-                  isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-600'
-                }`}
-              >
-                No problems match your current filter. Try adjusting difficulty or search criteria.
-              </div>
-            ) : (
-              filteredProblems.map((p: any) => {
-                const isSolved = solvedIds.has(p.id);
-                const isSelected = activeProblemId === p.id;
-
-                return (
-                  <div
-                    key={p.id}
-                    onClick={() => setActiveProblemId(p.id)}
-                    className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                      isSelected
-                        ? 'border-indigo-600 bg-indigo-500/10 ring-1 ring-indigo-500/50'
-                        : isDark
-                        ? 'bg-slate-900 border-slate-800 hover:border-slate-700 hover:bg-slate-800/60'
-                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50 shadow-2xs'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="shrink-0">
-                        {isSolved ? (
-                          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                        ) : (
-                          <div className={`w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-bold ${isDark ? 'border-slate-700 text-slate-500' : 'border-slate-300 text-slate-400'}`}>
-                            •
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-xs truncate">{p.title}</span>
-                          <span
-                            className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                              p.difficulty === 'easy'
-                                ? 'bg-emerald-500/10 text-emerald-500'
-                                : p.difficulty === 'medium'
-                                ? 'bg-amber-500/10 text-amber-500'
-                                : 'bg-rose-500/10 text-rose-500'
-                            }`}
-                          >
-                            {p.difficulty}
-                          </span>
-                        </div>
-                        <div className={`text-[10px] truncate mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                          {p.category} · +{p.xpReward} XP
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="shrink-0">
-                      {isSolved ? (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-bold">
-                          Solved
-                        </span>
-                      ) : (
-                        <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Right Pane: Embedded Sandboxed Mini Code Compiler (7 columns) */}
-        <div className="lg:col-span-7 space-y-4">
-          <div
-            className={`p-5 rounded-2xl border transition-colors ${
-              isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
-            }`}
-          >
-            {/* Problem Header Inside Editor */}
-            <div className="flex items-start justify-between gap-4 pb-4 border-b">
+      {/* Main Coding Workspace: Mobile Tabs (< 640px) vs Side-by-Side (>= 640px) */}
+      {(() => {
+        const renderProblemDetails = () => (
+          <div className="space-y-3">
+            <div className="flex items-start justify-between gap-4 pb-3 border-b">
               <div>
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
                       activeProblem.difficulty === 'easy'
@@ -648,14 +568,53 @@ export const CodingPracticeView: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <h3 className="text-lg font-bold">{activeProblem.title}</h3>
+                <h3 className="text-base sm:text-lg font-bold">{activeProblem.title}</h3>
                 <div className={`text-xs mt-1 leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
                   {activeProblem.description}
                 </div>
               </div>
+            </div>
 
-              {/* Language Switcher: JS, Python, C, C++17, Java */}
-              <div className="flex items-center gap-1 rounded-lg border p-0.5 text-xs font-semibold shrink-0 flex-wrap">
+            {/* Constraints & Hints toggles */}
+            <div className="py-1.5 flex items-center justify-between text-xs">
+              <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Function: <code className="font-mono text-indigo-500">{activeProblem.functionName}()</code>
+              </span>
+              <button
+                onClick={() => setShowHints(!showHints)}
+                className="text-indigo-500 hover:underline flex items-center gap-1 font-semibold text-xs cursor-pointer touch-target"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+                <span>{showHints ? 'Hide Hints' : 'Need a Hint?'}</span>
+              </button>
+            </div>
+
+            {showHints && (
+              <div
+                className={`p-3 rounded-xl border text-xs mb-2 space-y-1 ${
+                  isDark ? 'bg-indigo-950/30 border-indigo-500/30 text-indigo-200' : 'bg-indigo-50 border-indigo-200 text-indigo-900'
+                }`}
+              >
+                <div className="font-bold flex items-center gap-1 text-[11px]">
+                  <Sparkles className="w-3 h-3 text-indigo-400" />
+                  Pedagogical Hints:
+                </div>
+                {activeProblem.hints?.map((h: string, i: number) => (
+                  <div key={i}>• {h}</div>
+                )) || <div>Consider boundary conditions and time vs memory trade-offs.</div>}
+              </div>
+            )}
+          </div>
+        );
+
+        const renderEditor = () => (
+          <div className="space-y-2">
+            {/* Language Switcher */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Language:
+              </span>
+              <div className="flex items-center gap-1 rounded-lg border p-0.5 text-xs font-semibold shrink-0">
                 {[
                   { id: 'javascript', label: 'JS' },
                   { id: 'python', label: 'Python' },
@@ -666,7 +625,7 @@ export const CodingPracticeView: React.FC = () => {
                   <button
                     key={item.id}
                     onClick={() => setSelectedLanguage(item.id as SupportedLanguage)}
-                    className={`px-2 py-1 rounded transition-colors cursor-pointer text-xs font-semibold ${
+                    className={`px-2 py-1 rounded transition-colors cursor-pointer text-xs font-semibold touch-target ${
                       selectedLanguage === item.id
                         ? 'bg-indigo-600 text-white font-bold shadow-xs'
                         : isDark
@@ -680,36 +639,6 @@ export const CodingPracticeView: React.FC = () => {
               </div>
             </div>
 
-            {/* Constraints & Hints toggles */}
-            <div className="py-2.5 flex items-center justify-between text-xs">
-              <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                Function: <code className="font-mono text-indigo-500">{activeProblem.functionName}()</code>
-              </span>
-              <button
-                onClick={() => setShowHints(!showHints)}
-                className="text-indigo-500 hover:underline flex items-center gap-1 font-semibold text-xs cursor-pointer"
-              >
-                <HelpCircle className="w-3.5 h-3.5" />
-                <span>{showHints ? 'Hide Hints' : 'Need a Hint?'}</span>
-              </button>
-            </div>
-
-            {showHints && (
-              <div
-                className={`p-3 rounded-xl border text-xs mb-3 space-y-1 ${
-                  isDark ? 'bg-indigo-950/30 border-indigo-500/30 text-indigo-200' : 'bg-indigo-50 border-indigo-200 text-indigo-900'
-                }`}
-              >
-                <div className="font-bold flex items-center gap-1 text-[11px]">
-                  <Sparkles className="w-3 h-3 text-indigo-400" />
-                  Pedagogical Hints:
-                </div>
-                {activeProblem.hints?.map((h: string, i: number) => (
-                  <div key={i}>• {h}</div>
-                )) || <div>Consider boundary conditions and time vs memory trade-offs.</div>}
-              </div>
-            )}
-
             {/* Code Editor Textarea */}
             <div className="relative rounded-xl overflow-hidden border">
               <div
@@ -722,17 +651,24 @@ export const CodingPracticeView: React.FC = () => {
               </div>
               <textarea
                 value={userCode}
-                onChange={(e) => setUserCode(e.target.value)}
+                onChange={(e) => {
+                  setUserCode(e.target.value);
+                  saveStudentDraft(activeProblem.id, selectedLanguage, e.target.value);
+                }}
                 rows={11}
                 spellCheck={false}
-                className={`w-full p-3 font-mono text-xs outline-none resize-y leading-relaxed ${
+                className={`w-full p-3 font-mono text-sm sm:text-xs outline-none resize-y leading-relaxed ${
                   isDark ? 'bg-slate-950 text-emerald-300' : 'bg-[#1E1E1E] text-emerald-400'
                 }`}
               />
             </div>
+          </div>
+        );
 
+        const renderOutput = () => (
+          <div className="space-y-3">
             {/* Test Case Tab Bar */}
-            <div className="mt-4 pt-3 border-t">
+            <div className="pt-2 border-t">
               <div className="flex items-center justify-between mb-2">
                 <span className={`text-[11px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   Test Cases & Assertions
@@ -742,12 +678,12 @@ export const CodingPracticeView: React.FC = () => {
                 </span>
               </div>
 
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 mb-2">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 mb-2 no-scrollbar">
                 {activeProblem.testCases?.map((tc, idx) => (
                   <button
                     key={tc.id || idx}
                     onClick={() => setActiveTestTab(idx)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer touch-target ${
                       activeTestTab === idx
                         ? 'bg-indigo-600 text-white'
                         : isDark
@@ -768,11 +704,11 @@ export const CodingPracticeView: React.FC = () => {
                 >
                   <div>
                     <span className="text-slate-500 text-[11px]">Input: </span>
-                    <span>{activeProblem.testCases[activeTestTab].inputFormatted}</span>
+                    <span className="break-all">{activeProblem.testCases[activeTestTab].inputFormatted}</span>
                   </div>
                   <div>
                     <span className="text-slate-500 text-[11px]">Expected: </span>
-                    <span className="text-emerald-500 font-bold">
+                    <span className="text-emerald-500 font-bold break-all">
                       {activeProblem.testCases[activeTestTab].expectedOutputFormatted}
                     </span>
                   </div>
@@ -805,34 +741,248 @@ export const CodingPracticeView: React.FC = () => {
                 )}
               </div>
             )}
+          </div>
+        );
 
-            {/* Bottom Actions: Run Tests vs Submit Solution */}
-            <div className="mt-5 pt-3 border-t flex items-center justify-end gap-3">
-              <button
-                onClick={handleRunCode}
-                disabled={isRunning || isSubmitting}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                  isDark
-                    ? 'bg-slate-950 border-slate-800 text-slate-200 hover:text-white hover:bg-slate-800'
-                    : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
-                }`}
-              >
-                <Play className="w-3.5 h-3.5 text-emerald-400" />
-                <span>{isRunning ? 'Running Tests...' : 'Run in Sandbox'}</span>
-              </button>
+        const renderProblemList = () => (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs font-semibold px-1">
+              <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>
+                Showing {filteredProblems.length} Problems
+              </span>
+              <span className="text-indigo-500 font-bold">
+                Topic: {selectedTopicId === 'all' ? 'All Topics' : selectedTopicId.toUpperCase()}
+              </span>
+            </div>
 
-              <button
-                onClick={handleSubmitSolution}
-                disabled={isSubmitting || isRunning}
-                className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>{isSubmitting ? 'Verifying...' : `Submit Solution (+${activeProblem.xpReward} XP)`}</span>
-              </button>
+            <div className="space-y-2 max-h-[640px] overflow-y-auto pr-1">
+              {filteredProblems.length === 0 ? (
+                <div className="py-8">
+                  <IllustratedEmptyState
+                    type="no_results"
+                    title="No Challenges Found"
+                    description="No coding challenges match your active filter. Try resetting difficulty or search criteria."
+                    actionText="Reset Filters"
+                    onAction={() => {
+                      setSelectedTopicId('all');
+                      setSearchQuery('');
+                      setDifficultyFilter('all');
+                      setStatusFilter('all');
+                    }}
+                    isDark={isDark}
+                  />
+                </div>
+              ) : (
+                filteredProblems.map((p: any) => {
+                  const isSolved = solvedIds.has(p.id);
+                  const isSelected = activeProblemId === p.id;
+
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => setActiveProblemId(p.id)}
+                      className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        isSelected
+                          ? 'border-indigo-600 bg-indigo-500/10 ring-1 ring-indigo-500/50'
+                          : isDark
+                          ? 'bg-slate-900 border-slate-800 hover:border-slate-700 hover:bg-slate-800/60'
+                          : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50 shadow-2xs'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="shrink-0">
+                          {isSolved ? (
+                            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                          ) : (
+                            <div className={`w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-bold ${isDark ? 'border-slate-700 text-slate-500' : 'border-slate-300 text-slate-400'}`}>
+                              •
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-xs truncate">{p.title}</span>
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                                p.difficulty === 'easy'
+                                  ? 'bg-emerald-500/10 text-emerald-500'
+                                  : p.difficulty === 'medium'
+                                  ? 'bg-amber-500/10 text-amber-500'
+                                  : 'bg-rose-500/10 text-rose-500'
+                              }`}
+                            >
+                              {p.difficulty}
+                            </span>
+                          </div>
+                          <div className={`text-[10px] truncate mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                            {p.category} · +{p.xpReward} XP
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0">
+                        {isSolved ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-bold">
+                            Solved
+                          </span>
+                        ) : (
+                          <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-600' : 'text-slate-400'}`} />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
-        </div>
-      </div>
+        );
+
+        return (
+          <>
+            {/* 1. Mobile View (< 640px): TABS (Problem | Code | Output) + Sticky Actions */}
+            <div className="block sm:hidden space-y-3">
+              {/* Problem Quick Selector on mobile */}
+              <div className={`p-3 rounded-xl border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                  Choose Challenge ({filteredProblems.length} available)
+                </label>
+                <select
+                  value={activeProblemId}
+                  onChange={(e) => setActiveProblemId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-white font-medium focus:outline-none focus:border-indigo-500"
+                >
+                  {filteredProblems.map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {solvedIds.has(p.id) ? '✓ ' : ''}{p.title} ({p.difficulty.toUpperCase()} · +{p.xpReward} XP)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Mobile Tab Header */}
+              <div className="flex items-center p-1 bg-slate-900 border border-slate-800 rounded-xl">
+                <button
+                  onClick={() => setMobileTab('problem')}
+                  className={`flex-1 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all touch-target cursor-pointer ${
+                    mobileTab === 'problem'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Problem</span>
+                </button>
+                <button
+                  onClick={() => setMobileTab('code')}
+                  className={`flex-1 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all touch-target cursor-pointer ${
+                    mobileTab === 'code'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Code className="w-3.5 h-3.5" />
+                  <span>Code</span>
+                </button>
+                <button
+                  onClick={() => setMobileTab('output')}
+                  className={`flex-1 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all touch-target cursor-pointer relative ${
+                    mobileTab === 'output'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Terminal className="w-3.5 h-3.5" />
+                  <span>Output</span>
+                  {runSummary && (
+                    <span className={`w-2 h-2 rounded-full ${runSummary.allPassed ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                  )}
+                </button>
+              </div>
+
+              {/* Mobile Tab Content Card */}
+              <div
+                className={`p-4 rounded-2xl border ${
+                  isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+                }`}
+              >
+                {mobileTab === 'problem' && renderProblemDetails()}
+                {mobileTab === 'code' && renderEditor()}
+                {mobileTab === 'output' && renderOutput()}
+              </div>
+
+              {/* Mobile Sticky Bottom Action Bar */}
+              <div className="sticky bottom-0 z-20 py-2.5 px-3 bg-slate-950/95 backdrop-blur-md border border-slate-800 rounded-2xl flex items-center justify-between gap-2 shadow-2xl">
+                <button
+                  onClick={handleRunCode}
+                  disabled={isRunning || isSubmitting}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white font-semibold text-xs border border-slate-700 transition-all touch-target cursor-pointer disabled:opacity-50"
+                >
+                  <Play className={`w-3.5 h-3.5 ${isRunning ? 'animate-spin' : 'text-emerald-400'}`} />
+                  <span>{isRunning ? 'Running...' : 'Run Sandbox'}</span>
+                </button>
+
+                <button
+                  onClick={handleSubmitSolution}
+                  disabled={isSubmitting || isRunning}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all touch-target cursor-pointer disabled:opacity-50"
+                >
+                  <CheckCircle2 className={`w-4 h-4 ${isSubmitting ? 'animate-bounce' : ''}`} />
+                  <span>{isSubmitting ? 'Verifying...' : `Submit (+${activeProblem.xpReward} XP)`}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Tablet & Laptop Workspace (>= 640px): Two-Pane Side-by-Side */}
+            <div className="hidden sm:grid sm:grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Pane: Question List (5 columns) */}
+              <div className="lg:col-span-5 space-y-2">
+                {renderProblemList()}
+              </div>
+
+              {/* Right Pane: Embedded Sandboxed Mini Code Compiler (7 columns) */}
+              <div className="lg:col-span-7 space-y-4">
+                <div
+                  className={`p-5 rounded-2xl border transition-colors ${
+                    isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+                  }`}
+                >
+                  {renderProblemDetails()}
+                  <div className="mt-4">
+                    {renderEditor()}
+                  </div>
+                  {renderOutput()}
+
+                  {/* Bottom Actions: Run Tests vs Submit Solution */}
+                  <div className="mt-5 pt-3 border-t flex items-center justify-end gap-3">
+                    <button
+                      onClick={handleRunCode}
+                      disabled={isRunning || isSubmitting}
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer touch-target ${
+                        isDark
+                          ? 'bg-slate-950 border-slate-800 text-slate-200 hover:text-white hover:bg-slate-800'
+                          : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
+                      }`}
+                    >
+                      <Play className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{isRunning ? 'Running Tests...' : 'Run in Sandbox'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleSubmitSolution}
+                      disabled={isSubmitting || isRunning}
+                      className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all cursor-pointer touch-target"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>{isSubmitting ? 'Verifying...' : `Submit Solution (+${activeProblem.xpReward} XP)`}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 };

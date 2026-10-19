@@ -181,20 +181,24 @@ Keep it engaging, friendly, easy to grasp, and encouraging in 2-3 sentences.`;
 
 // 4. Code Execution Service (/api/run) for C++, C, Java, Python, and JavaScript
 app.post('/api/run', async (req: Request, res: Response) => {
-  const { language, code, problem, onlyVisibleCases = false } = req.body;
+  const { language, code, source_code, stdin = '', problem, onlyVisibleCases = false, studentId } = req.body;
+  const targetCode = source_code || code;
 
-  if (!language || !code || !problem) {
+  if (!language || !targetCode) {
     return res.status(400).json({
-      error: 'Missing required parameters: language, code, and problem are required.',
+      error: 'Missing required parameters: language and source_code (or code) are required.',
     });
   }
 
   try {
     const summary = await executeCode({
       language,
-      code,
+      code: targetCode,
+      source_code: targetCode,
+      stdin,
       problem,
       onlyVisibleCases,
+      studentId: studentId || req.ip || 'anon',
     });
     return res.json(summary);
   } catch (err: any) {
@@ -438,9 +442,12 @@ app.get('/api/notifications/vapid-public-key', (_req: Request, res: Response) =>
 });
 
 app.post('/api/notifications/push-subscribe', (req: Request, res: Response) => {
-  const { userId, subscription } = req.body;
+  const { userId, role, subscription } = req.body;
   if (!userId || !subscription) {
     return res.status(400).json({ error: 'Missing userId or subscription payload' });
+  }
+  if (role && role !== 'student') {
+    return res.status(403).json({ error: 'Push notifications are enabled for student accounts only.' });
   }
   savePushSubscription(userId, subscription);
   return res.json({ success: true, message: 'Push subscription registered.' });

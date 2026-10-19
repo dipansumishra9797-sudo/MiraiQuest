@@ -91,9 +91,6 @@ export interface StudentProfile {
   year: AcademicYear;
   section: string; // e.g. "CS-A", "CS-B", "IT-A"
   avatar: string;
-  anonymousNickname: string;
-  isAnonymous: boolean;
-  optOutOfLeaderboards: boolean;
   shareSocialLinksWithBatchmates?: boolean;
   acceptedAnswerCount?: number;
   
@@ -196,9 +193,14 @@ export interface Badge {
   description: string;
   category: 'milestone' | 'improvement' | 'streak' | 'mastery' | 'boss';
   icon: string;
+  iconType?: string;
+  rarity?: 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond';
+  shape?: 'shield' | 'hexagon' | 'star' | 'crown' | 'laurel' | 'trophy' | 'ribbon' | 'gem' | 'circle';
   xpReward: number;
   conditionDescription: string;
   unlockedAt?: string;
+  currentProgress?: number;
+  maxProgress?: number;
 }
 
 export interface Quest {
@@ -210,9 +212,11 @@ export interface Quest {
   targetCount: number;
   currentProgress: number;
   rewardXp: number;
+  rewardCoins?: number;
   rewardBadgeId?: string;
   isCompleted: boolean;
   expiresInDays?: number;
+  icon?: string;
 }
 
 export interface TeamBattleTeam {

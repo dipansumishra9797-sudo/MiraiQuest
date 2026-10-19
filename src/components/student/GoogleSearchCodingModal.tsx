@@ -175,32 +175,32 @@ export const GoogleSearchCodingModal: React.FC<GoogleSearchCodingModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
       <div
-        className={`w-full max-w-3xl max-h-[92vh] flex flex-col rounded-2xl border shadow-2xl overflow-hidden transition-colors ${
+        className={`w-full max-w-3xl h-[100dvh] sm:h-auto sm:max-h-[92vh] flex flex-col rounded-t-2xl sm:rounded-2xl border shadow-2xl overflow-hidden pb-safe sm:pb-0 transition-colors ${
           isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-2xl'
         }`}
       >
         {/* ─── Header ─── */}
         <div
-          className={`p-5 border-b flex items-center justify-between shrink-0 ${
+          className={`p-4 sm:p-5 border-b flex items-center justify-between shrink-0 ${
             isDark ? 'border-slate-800 bg-slate-950/50' : 'border-slate-200 bg-slate-50/70'
           }`}
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-emerald-400 flex items-center justify-center shadow-sm">
-              <Search className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-emerald-400 flex items-center justify-center shadow-sm shrink-0">
+              <Search className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
             <div>
-              <h3 className="text-base font-bold">Search LeetCode / HackerRank</h3>
-              <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                Fetch competitive programming problems — all results come from our secure backend.
+              <h3 className="text-sm sm:text-base font-bold">Search LeetCode / HackerRank</h3>
+              <p className={`text-[11px] sm:text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Fetch competitive programming problems with verified solution tracking.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className={`p-2 rounded-lg transition-colors ${
+            className={`p-2 rounded-lg touch-target flex items-center justify-center transition-colors ${
               isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
@@ -210,7 +210,7 @@ export const GoogleSearchCodingModal: React.FC<GoogleSearchCodingModalProps> = (
 
         {/* ─── Search Bar & Filters ─── */}
         <div
-          className={`p-4 border-b space-y-3 shrink-0 ${
+          className={`p-3.5 sm:p-4 border-b space-y-3 shrink-0 ${
             isDark ? 'border-slate-800 bg-slate-900/40' : 'border-slate-200 bg-slate-50/30'
           }`}
         >
@@ -219,7 +219,7 @@ export const GoogleSearchCodingModal: React.FC<GoogleSearchCodingModalProps> = (
               e.preventDefault();
               handleSearch(query, topic, platform, difficulty, 1, false);
             }}
-            className="flex items-center gap-2"
+            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
           >
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -236,27 +236,29 @@ export const GoogleSearchCodingModal: React.FC<GoogleSearchCodingModalProps> = (
               />
             </div>
 
-            <select
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              className={`px-3 py-2.5 rounded-xl border text-xs font-medium ${
-                isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-700 shadow-xs'
-              }`}
-            >
-              <option value="">Any Topic</option>
-              {['Arrays', 'Strings', 'Graphs', 'DP', 'Trees', 'Hashing'].map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                className={`flex-1 sm:flex-initial px-3 py-2.5 rounded-xl border text-xs font-medium ${
+                  isDark ? 'bg-slate-950 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-700 shadow-xs'
+                }`}
+              >
+                <option value="">Any Topic</option>
+                {['Arrays', 'Strings', 'Graphs', 'DP', 'Trees', 'Hashing'].map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
 
-            <button
-              type="submit"
-              disabled={loading || (!query.trim() && !topic.trim())}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all shrink-0 cursor-pointer"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-              <span>{loading ? 'Searching…' : 'Search'}</span>
-            </button>
+              <button
+                type="submit"
+                disabled={loading || (!query.trim() && !topic.trim())}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all shrink-0 cursor-pointer touch-target"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                <span>{loading ? 'Searching…' : 'Search'}</span>
+              </button>
+            </div>
           </form>
 
           {/* Platform & Difficulty chips */}
@@ -438,9 +440,9 @@ export const GoogleSearchCodingModal: React.FC<GoogleSearchCodingModalProps> = (
 
         {/* ─── Assign Modal Overlay ─── */}
         {assigningProblem && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center p-6 bg-slate-950/60 backdrop-blur-sm rounded-2xl">
+          <div className="absolute inset-0 z-10 flex items-center justify-center p-3 sm:p-6 bg-slate-950/60 backdrop-blur-sm rounded-none sm:rounded-2xl">
             <div
-              className={`w-full max-w-md rounded-2xl border p-6 space-y-4 shadow-2xl ${
+              className={`w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border p-4 sm:p-6 space-y-4 shadow-2xl ${
                 isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'
               }`}
             >
@@ -448,7 +450,7 @@ export const GoogleSearchCodingModal: React.FC<GoogleSearchCodingModalProps> = (
                 <h4 className="text-sm font-bold">Assign as Coursework</h4>
                 <button
                   onClick={() => setAssigningProblem(null)}
-                  className={`p-1.5 rounded-lg ${isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-100'}`}
+                  className={`p-1.5 rounded-lg touch-target flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-100'}`}
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -527,16 +529,16 @@ export const GoogleSearchCodingModal: React.FC<GoogleSearchCodingModalProps> = (
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-1">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 pt-1">
                 <button
                   onClick={() => setAssigningProblem(null)}
-                  className={`px-4 py-2 rounded-xl text-xs font-medium ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-medium text-center ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleAssign}
-                  className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+                  className="flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all cursor-pointer touch-target"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   Publish Assignment

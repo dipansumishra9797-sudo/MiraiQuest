@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../store/appStore';
 import { NavigationDrawer } from './NavigationDrawer';
+import { NotificationPanel } from './NotificationPanel';
 import {
   Menu,
   ShieldCheck,
@@ -11,6 +12,7 @@ import {
   Sun,
   Moon,
   User,
+  Bell,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -33,9 +35,28 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, onOpenQ
     toggleDrawer,
     setNavSection,
     openProfileModal,
+    notifications,
   } = useApp();
 
   const [showRoleMenu, setShowRoleMenu] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [isRinging, setIsRinging] = useState(false);
+
+  const unreadNotifCount = notifications.filter((n) => !n.read).length;
+  const prevUnreadRef = useRef(unreadNotifCount);
+
+  useEffect(() => {
+    if (role === 'student' && unreadNotifCount > prevUnreadRef.current) {
+      setIsRinging(true);
+      const timer = setTimeout(() => setIsRinging(false), 850);
+      return () => clearTimeout(timer);
+    }
+    prevUnreadRef.current = unreadNotifCount;
+  }, [unreadNotifCount, role]);
+
+  const currentUserName =
+    role === 'student' ? activeStudent.name : role === 'faculty' ? activeFaculty.name : 'Dean Vikram Rao';
+  const currentUserInitial = currentUserName.charAt(0);
 
   return (
     <>
@@ -46,14 +67,14 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, onOpenQ
             : 'bg-white/95 border-slate-200 text-slate-900 shadow-xs'
         }`}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-4 h-16">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 h-16">
           {/* Zone 1: Hamburger Menu + Wordmark */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Hamburger Icon immediately to the LEFT of the MiraiQuest logo */}
             <button
               onClick={toggleDrawer}
               title="Open Navigation Menu"
-              className={`p-2 rounded-xl border transition-all flex items-center justify-center cursor-pointer ${
+              className={`p-2 rounded-xl border transition-all flex items-center justify-center cursor-pointer touch-target ${
                 isDark
                   ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-700'
                   : 'bg-slate-100 border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-200/80 shadow-2xs'
@@ -69,21 +90,44 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, onOpenQ
                 setNavSection('dashboard:overview');
                 onTabChange('dashboard');
               }}
-              className="text-lg font-bold tracking-tight whitespace-nowrap shrink-0 flex items-center gap-2 hover:opacity-90 transition-opacity cursor-pointer"
+              className="text-base sm:text-lg font-bold tracking-tight whitespace-nowrap shrink-0 flex items-center gap-1.5 sm:gap-2 hover:opacity-90 transition-opacity cursor-pointer"
             >
               <span className="w-2.5 h-2.5 rounded-xs bg-indigo-500 inline-block shadow-xs shadow-indigo-500/50" />
               <span className={isDark ? 'text-white' : 'text-slate-900'}>MiraiQuest</span>
-              <span className={`text-xs font-normal ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>· MSOT</span>
+              <span className={`text-[11px] sm:text-xs font-normal ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>· MSOT</span>
             </button>
           </div>
 
-          {/* Zone 2: Actions, Quick Theme, User Name (Profile), Role Switcher */}
-          <div className="relative flex items-center gap-2 sm:gap-3 shrink-0">
-            {/* Dark / Light Mode Sun/Moon Toggle */}
+          {/* Zone 2: Actions, Notifications (Student Only), Theme Toggle, User Name (Profile), Role Switcher */}
+          <div className="relative flex items-center gap-1.5 sm:gap-3 shrink-0">
+            {/* Notification Bell Button (STUDENTS ONLY) */}
+            {role === 'student' && (
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                title="Notifications"
+                className={`relative p-2 rounded-xl border transition-all flex items-center justify-center cursor-pointer touch-target pressable-btn ${
+                  isDark
+                    ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700 hover:bg-slate-800'
+                    : 'bg-slate-100 border-slate-200 text-slate-700 hover:text-slate-900 hover:border-slate-300 hover:bg-slate-200/80 shadow-xs'
+                }`}
+                aria-label="View notifications"
+              >
+                <Bell className={`w-4 h-4 transition-transform ${isRinging ? 'animate-bell-ring text-indigo-500' : ''}`} />
+                {unreadNotifCount > 0 && (
+                  <span className="absolute -top-1 -right-1 px-1.5 py-0.2 min-w-[18px] text-[10px] font-extrabold rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-xs animate-in zoom-in-75 duration-200">
+                    {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* Dark / Light Mode Sun/Moon Toggle: Always visible for teacher/admin; visible on tablet/laptop for student */}
             <button
               onClick={toggleTheme}
               title={`Switch to ${isDark ? 'Light' : 'Dark'} mode`}
-              className={`p-2 rounded-xl border transition-all flex items-center justify-center cursor-pointer ${
+              className={`${
+                role === 'student' ? 'hidden sm:flex' : 'flex'
+              } p-2 rounded-xl border transition-all items-center justify-center cursor-pointer touch-target ${
                 isDark
                   ? 'bg-slate-900 border-slate-800 text-amber-400 hover:text-amber-300 hover:border-slate-700 hover:bg-slate-800'
                   : 'bg-slate-100 border-slate-200 text-indigo-600 hover:text-indigo-800 hover:border-slate-300 hover:bg-slate-200/80 shadow-xs'
@@ -97,26 +141,37 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, onOpenQ
               )}
             </button>
 
-            {/* User Name Trigger -> Opens Profile Page */}
+            {/* User Profile Avatar / Name Trigger -> Opens Profile Modal */}
+            {/* Mobile View: Avatar circle only */}
             <button
               onClick={() => openProfileModal(undefined, role, 'profile')}
-              title={`Open ${role === 'student' ? activeStudent.name : role === 'faculty' ? activeFaculty.name : 'Dean Vikram Rao'}'s profile`}
-              className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium border rounded-xl transition-all whitespace-nowrap cursor-pointer ${
+              title={`Open ${currentUserName}'s profile`}
+              className="sm:hidden w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-xs shadow-xs cursor-pointer hover:opacity-90 transition-opacity touch-target"
+              aria-label="Open profile modal"
+            >
+              {currentUserInitial}
+            </button>
+
+            {/* Tablet & Desktop View: Avatar icon + Name */}
+            <button
+              onClick={() => openProfileModal(undefined, role, 'profile')}
+              title={`Open ${currentUserName}'s profile`}
+              className={`hidden sm:flex items-center gap-2 px-3 py-1.5 text-xs font-medium border rounded-xl transition-all whitespace-nowrap cursor-pointer touch-target ${
                 isDark
                   ? 'text-slate-200 bg-slate-900 border-slate-800 hover:border-indigo-500 hover:bg-slate-800/90 hover:text-indigo-300'
                   : 'text-slate-800 bg-slate-100 border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-700 shadow-xs'
               }`}
             >
               <User className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-              <span className="font-semibold truncate max-w-[130px] sm:max-w-[170px]">
-                {role === 'student' ? activeStudent.name : role === 'faculty' ? activeFaculty.name : 'Dean Vikram Rao'}
+              <span className="font-semibold truncate max-w-[130px] md:max-w-[170px]">
+                {currentUserName}
               </span>
             </button>
 
-            {/* Role Dropdown Trigger */}
+            {/* Role Dropdown Trigger (Hidden on mobile; mobile switches in drawer) */}
             <button
               onClick={() => setShowRoleMenu(!showRoleMenu)}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer touch-target ${
                 isDark
                   ? 'text-slate-300 bg-slate-900 border-slate-800 hover:border-slate-700 hover:bg-slate-800'
                   : 'text-slate-700 bg-slate-100 border-slate-200 hover:border-slate-300 hover:bg-slate-200/80 shadow-xs'
@@ -130,18 +185,27 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, onOpenQ
               <ChevronDown className="w-3 h-3 text-slate-400" />
             </button>
 
-            {/* Quick Reset Button */}
+            {/* Quick Reset Button (Hidden on mobile; in drawer on mobile) */}
             <button
               onClick={resetAllData}
               title="Reset demo data to initial state"
-              className={`p-2 border rounded-xl transition-colors cursor-pointer ${
+              className={`hidden sm:flex p-2 border rounded-xl transition-colors cursor-pointer touch-target ${
                 isDark
                   ? 'text-slate-400 hover:text-slate-200 bg-slate-900 border-slate-800 hover:bg-slate-800'
                   : 'text-slate-600 hover:text-slate-900 bg-slate-100 border-slate-200 hover:bg-slate-200/80 shadow-xs'
               }`}
+              aria-label="Reset demo data"
             >
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
+
+            {/* Notifications Popover / Panel (STUDENTS ONLY) */}
+            {role === 'student' && (
+              <NotificationPanel
+                isOpen={showNotifications}
+                onClose={() => setShowNotifications(false)}
+              />
+            )}
 
             {/* Role Dropdown Menu */}
             {showRoleMenu && (
@@ -186,8 +250,8 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, onOpenQ
                       {[
                         { id: 'std_rahul_verma', name: 'Rahul Verma (Bottom-quartile comeback)', tag: 'Rathinam · Lvl 2' },
                         { id: 'std_maya_sharma', name: 'Maya Sharma (Top scholar)', tag: 'HI-Tech · Lvl 6' },
-                        { id: 'std_arjun_patel', name: 'Arjun Patel (Anonymous mode demo)', tag: 'HI-Tech · Lvl 4' },
-                        { id: 'std_sneha_kulkarni', name: 'Sneha K. (Opted-out of rankings)', tag: 'Rathinam · Lvl 3' },
+                        { id: 'std_arjun_patel', name: 'Arjun Patel (Gold League)', tag: 'HI-Tech · Lvl 4' },
+                        { id: 'std_sneha_kulkarni', name: 'Sneha Kulkarni (Consistent Scholar)', tag: 'Rathinam · Lvl 3' },
                       ].map((s) => (
                         <button
                           key={s.id}

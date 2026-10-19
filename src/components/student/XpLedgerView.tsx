@@ -24,7 +24,7 @@ export const XpLedgerView: React.FC = () => {
   const isAuditMatch = calculatedTotal === activeStudent.totalXp;
 
   const handleExportCsv = () => {
-    const displayName = activeStudent.isAnonymous ? activeStudent.anonymousNickname : activeStudent.name;
+    const displayName = activeStudent.name;
     const headers = ['Date', 'Timestamp', 'Student', 'Action Type', 'Source Description', 'Points', 'Status', 'Void Reason'];
     const rows = filteredEntries.map((e) => [
       e.date,
@@ -105,18 +105,18 @@ export const XpLedgerView: React.FC = () => {
       </div>
 
       {/* Filters Bar */}
-      <div className={`p-4 rounded-xl border flex flex-wrap items-center justify-between gap-4 transition-colors ${cardBg}`}>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className={`flex items-center gap-1.5 text-xs mr-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+      <div className={`p-3.5 sm:p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 transition-colors ${cardBg}`}>
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar w-full sm:w-auto pb-1 sm:pb-0">
+          <div className={`flex items-center gap-1.5 text-xs shrink-0 mr-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             <Filter className="w-3.5 h-3.5" />
-            <span>Filter:</span>
+            <span className="hidden sm:inline">Filter:</span>
           </div>
 
           {actionTypes.map((t) => (
             <button
               key={t.id}
               onClick={() => setFilterType(t.id)}
-              className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-colors ${
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium whitespace-nowrap transition-colors touch-target cursor-pointer shrink-0 ${
                 filterType === t.id
                   ? 'bg-indigo-600 text-white font-semibold shadow-xs'
                   : isDark
@@ -129,13 +129,13 @@ export const XpLedgerView: React.FC = () => {
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Calendar className={`w-3.5 h-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
           <input
             type="date"
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
-            className={`rounded-lg px-2.5 py-1 text-xs focus:outline-hidden focus:border-indigo-500 border ${
+            className={`rounded-lg px-2.5 py-1.5 text-xs focus:outline-hidden focus:border-indigo-500 border w-full sm:w-auto ${
               isDark
                 ? 'bg-slate-950 border-slate-800 text-slate-200'
                 : 'bg-white border-slate-200 text-slate-800'
@@ -144,7 +144,7 @@ export const XpLedgerView: React.FC = () => {
           {dateFilter && (
             <button
               onClick={() => setDateFilter('')}
-              className={`text-xs ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`}
+              className={`text-xs px-2 py-1 rounded touch-target cursor-pointer ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`}
             >
               Clear
             </button>
@@ -152,8 +152,69 @@ export const XpLedgerView: React.FC = () => {
         </div>
       </div>
 
-      {/* Ledger Table */}
-      <div className={`rounded-xl border overflow-hidden transition-colors ${cardBg}`}>
+      {/* 1. Mobile View (< 640px): Stacked Ledger Cards */}
+      <div className="block sm:hidden space-y-3">
+        {filteredEntries.length === 0 ? (
+          <div className={`p-8 rounded-xl border text-center text-xs ${isDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500'}`}>
+            No ledger entries matching the selected criteria.
+          </div>
+        ) : (
+          filteredEntries.map((entry) => {
+            const isVoided = entry.status === 'voided';
+            return (
+              <div
+                key={entry.id}
+                className={`p-4 rounded-xl border transition-all space-y-2.5 ${
+                  isVoided ? 'opacity-60 border-rose-500/30' : ''
+                } ${cardBg}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                      {entry.actionType.replace('_', ' ')}
+                    </span>
+                    {isVoided ? (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-rose-500/20 text-rose-400">
+                        VOIDED
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-emerald-500/20 text-emerald-400">
+                        VALID
+                      </span>
+                    )}
+                  </div>
+                  <div className={`text-sm font-bold tabular-nums ${isVoided ? 'text-slate-500 line-through' : 'text-emerald-500'}`}>
+                    +{entry.points} XP
+                  </div>
+                </div>
+
+                <div className={`text-xs leading-relaxed ${isVoided ? 'line-through text-slate-400' : isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                  {entry.sourceDescription}
+                </div>
+
+                {isVoided && entry.voidedReason && (
+                  <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-[10px] text-rose-400 flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>Voided by {entry.voidedBy || 'Faculty'}: {entry.voidedReason}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/40">
+                  <div className="font-mono">
+                    {entry.date} · {entry.timestamp.split('T')[1]?.slice(0, 5)}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono">
+                    ID: {entry.id.slice(-6)}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* 2. Tablet & Desktop View (>= 640px): Ledger Table */}
+      <div className={`hidden sm:block rounded-xl border overflow-hidden transition-colors ${cardBg}`}>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className={`border-b font-medium ${headerBg}`}>

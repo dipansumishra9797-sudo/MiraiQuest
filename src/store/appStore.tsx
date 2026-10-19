@@ -102,8 +102,6 @@ interface AppContextType {
   updateRule: (ruleId: string, updates: Partial<XpRule>, adminName: string) => void;
   toggleRuleActive: (ruleId: string, adminName: string) => void;
   voidLedgerEntry: (ledgerId: string, reason: string, voidedByName: string) => void;
-  toggleAnonymousMode: (studentId: string) => void;
-  toggleOptOutOfLeaderboards: (studentId: string) => void;
   claimDailyQuizReward: (score: number, total: number, timeSpentArr: number[], subjectId: string) => { success: boolean; xpEarned: number; reason?: string };
   answerPeerDoubt: (postId: string, answerText: string) => void;
   acceptPeerAnswer: (postId: string, answerId: string) => Promise<{ success: boolean; message: string; xpAwarded?: number }>;
@@ -326,7 +324,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeStudentId, setActiveStudentId] = useState<string>(initial?.activeStudentId || 'std_rahul_verma');
   const [activeFacultyId, setActiveFacultyId] = useState<string>(initial?.activeFacultyId || 'fac_priya_nair');
 
-  const [students, setStudents] = useState<StudentProfile[]>(initial?.students || INITIAL_STUDENTS);
+  // Safe migration helper: ensure legacy privacy flags are cleaned
+  const migrateStudentProfiles = (rawList: any[]): StudentProfile[] => {
+    return rawList.map((s) => {
+      const clean: any = {};
+      for (const key of Object.keys(s)) {
+        if (!key.toLowerCase().includes('anon') && !key.toLowerCase().includes('opt')) {
+          clean[key] = s[key];
+        }
+      }
+      return clean as StudentProfile;
+    });
+  };
+
+  const [students, setStudents] = useState<StudentProfile[]>(() =>
+    migrateStudentProfiles(initial?.students || INITIAL_STUDENTS)
+  );
   const [facultyList, setFacultyList] = useState<FacultyProfile[]>(INITIAL_FACULTY);
   const [rules, setRules] = useState<XpRule[]>(initial?.rules || INITIAL_RULES);
   const [ruleAuditLogs, setRuleAuditLogs] = useState<RuleAuditLog[]>(initial?.ruleAuditLogs || []);
@@ -893,12 +906,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const activeStudent = students.find((s) => s.id === activeStudentId) || students[0];
   const activeFaculty = facultyList.find((f) => f.id === activeFacultyId) || facultyList[0];
 
-  // Real-time WebSocket Gateway
+  // Real-time WebSocket Gateway (Students Only)
   useEffect(() => {
+    if (role !== 'student') return;
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/notifications?userId=${
-      role === 'student' ? activeStudent.id : activeFaculty.id
-    }&role=${role}&campus=${activeStudent.campus}&year=${activeStudent.year}&section=${activeStudent.section}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws/notifications?userId=${activeStudent.id}&role=student&campus=${activeStudent.campus}&year=${activeStudent.year}&section=${activeStudent.section}`;
 
     let ws: WebSocket | null = null;
     try {
@@ -916,7 +929,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       if (ws) ws.close();
     };
-  }, [role, activeStudent.id, activeFaculty.id, activeStudent.campus, activeStudent.year, activeStudent.section]);
+  }, [role, activeStudent.id, activeStudent.campus, activeStudent.year, activeStudent.section]);
 
   const triggerConfetti = () => {
     confetti({
@@ -1262,17 +1275,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const toggleAnonymousMode = (studentId: string) => {
-    setStudents((prev) =>
-      prev.map((s) => (s.id === studentId ? { ...s, isAnonymous: !s.isAnonymous } : s))
-    );
-  };
 
-  const toggleOptOutOfLeaderboards = (studentId: string) => {
-    setStudents((prev) =>
-      prev.map((s) => (s.id === studentId ? { ...s, optOutOfLeaderboards: !s.optOutOfLeaderboards } : s))
-    );
-  };
 
   // Claim Daily Quiz
   const claimDailyQuizReward = (score: number, total: number, timeSpentArr: number[], subjectId: string) => {
@@ -1303,7 +1306,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newPost: PeerHelpPost = {
       id: `post_${Date.now()}`,
       studentId: activeStudent.id,
-      authorName: activeStudent.isAnonymous ? activeStudent.anonymousNickname : activeStudent.name,
+      authorName: activeStudent.name,
       authorCampus: activeStudent.campus,
       title,
       body,
@@ -2116,8 +2119,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateRule,
         toggleRuleActive,
         voidLedgerEntry,
-        toggleAnonymousMode,
-        toggleOptOutOfLeaderboards,
         claimDailyQuizReward,
         answerPeerDoubt,
         acceptPeerAnswer,

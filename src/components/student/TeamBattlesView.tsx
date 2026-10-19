@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import { useApp } from '../../store/appStore';
 import { PAST_BATTLE_MATCHES } from '../../data/mockData';
 import {
@@ -181,22 +182,22 @@ export const TeamBattlesView: React.FC = () => {
 
                 return (
                   <div key={team.teamId} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-5 text-center font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>#{idx + 1}</span>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`w-5 text-left sm:text-center font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>#{idx + 1}</span>
                         <span className="font-semibold">{team.teamName}</span>
                         {isUserCampus && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 font-bold">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 font-bold shrink-0">
                             YOUR CAMPUS
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-3">
-                        <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
+                        <span className={`text-[10px] sm:text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                           {team.participantCount}/{team.eligibleStudentCount} Students · {team.totalRawXp} Raw XP
                         </span>
-                        <span className="text-emerald-600 dark:text-emerald-400 font-bold tabular-nums text-sm">
+                        <span className="text-emerald-600 dark:text-emerald-400 font-bold tabular-nums text-xs sm:text-sm shrink-0">
                           {team.normalizedScore} pts
                         </span>
                       </div>
@@ -206,15 +207,17 @@ export const TeamBattlesView: React.FC = () => {
                     <div className={`w-full h-3 rounded-full overflow-hidden p-0.5 border ${
                       isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
                     }`}>
-                      <div
-                        className={`h-full rounded-full transition-all duration-700 ${
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${widthPercent}%` }}
+                        transition={{ duration: 0.8, ease: 'easeOut' }}
+                        className={`h-full rounded-full ${
                           idx === 0
                             ? 'bg-amber-400 shadow-xs'
                             : idx === 1
                             ? 'bg-indigo-500'
                             : isDark ? 'bg-slate-600' : 'bg-slate-400'
                         }`}
-                        style={{ width: `${widthPercent}%` }}
                       />
                     </div>
                   </div>
@@ -234,9 +237,13 @@ export const TeamBattlesView: React.FC = () => {
 
           <div className="space-y-3 overflow-y-auto max-h-[300px] flex-1">
             {activeBattle.recentSubmissions.map((sub) => (
-              <div
+              <motion.div
+                layout
                 key={sub.id}
-                className={`p-2.5 rounded-xl border text-xs flex items-center justify-between transition-colors ${subCardBg}`}
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3 }}
+                className={`p-2.5 rounded-xl border text-xs flex items-center justify-between transition-colors interactive-card ${subCardBg}`}
               >
                 <div>
                   <div className="font-medium">{sub.studentName}</div>
@@ -249,7 +256,7 @@ export const TeamBattlesView: React.FC = () => {
                 <div className="text-right">
                   <span className="text-emerald-600 dark:text-emerald-400 font-bold tabular-nums">+{sub.points} XP</span>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
@@ -281,8 +288,8 @@ export const TeamBattlesView: React.FC = () => {
           </div>
         </div>
 
-        {/* 3 Matches Summary Cards Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* 3 Matches Summary Cards Grid: 1 col on mobile, 2 on tablet, 3 on laptop */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {PAST_BATTLE_MATCHES.map((match) => {
             const totalScore = match.winnerTeam.score + match.runnerUpTeam.score;
             const winnerWidthPercent = Math.round((match.winnerTeam.score / totalScore) * 100);

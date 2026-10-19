@@ -1,54 +1,162 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../../store/appStore';
 import { Badge, Quest } from '../../types';
+import { BadgeEmblem, BadgeRarity, MedalShape } from '../common/BadgeEmblem';
+import { BadgeDetailModal } from './BadgeDetailModal';
+import { fireConfetti } from '../../utils/confetti';
 import {
   Sparkles,
-  Flame,
-  Shield,
-  Code2,
   Award,
-  TrendingUp,
-  Zap,
-  Rocket,
-  Crown,
+  Target,
   Lock,
   CheckCircle2,
-  Target,
+  Zap,
+  Coins,
+  Gift,
+  Clock,
+  BookOpen,
+  Code2,
+  Calendar,
+  Share2,
+  ExternalLink,
 } from 'lucide-react';
 
 export const BadgesQuestsView: React.FC = () => {
-  const { activeStudent, badges, quests, triggerConfetti, isDark } = useApp();
+  const { activeStudent, badges, quests, triggerConfetti, triggerXpEvent, isDark } = useApp();
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [selectedBadge, setSelectedBadge] = useState<Badge | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
+  const [unlockingBadgeId, setUnlockingBadgeId] = useState<string | null>(null);
 
-  const getBadgeIcon = (iconName: string) => {
-    switch (iconName) {
-      case 'Sparkles': return <Sparkles className="w-5 h-5 text-amber-500" />;
-      case 'Flame': return <Flame className="w-5 h-5 text-orange-500" />;
-      case 'Shield': return <Shield className="w-5 h-5 text-blue-500" />;
-      case 'Code2': return <Code2 className="w-5 h-5 text-indigo-500" />;
-      case 'Award': return <Award className="w-5 h-5 text-emerald-500" />;
-      case 'TrendingUp': return <TrendingUp className="w-5 h-5 text-emerald-500" />;
-      case 'Zap': return <Zap className="w-5 h-5 text-amber-500" />;
-      case 'Rocket': return <Rocket className="w-5 h-5 text-rose-500" />;
-      case 'Crown': return <Crown className="w-5 h-5 text-amber-500" />;
-      default: return <Award className="w-5 h-5 text-slate-400" />;
-    }
-  };
+  // Claim Quest State
+  const [claimingQuestId, setClaimingQuestId] = useState<string | null>(null);
+  const [claimedQuestIds, setClaimedQuestIds] = useState<Set<string>>(new Set());
+  const [questRewardToast, setQuestRewardToast] = useState<{
+    title: string;
+    xp: number;
+    coins: number;
+  } | null>(null);
 
   const filteredBadges = badges.filter((b) => {
     if (filterCategory === 'all') return true;
     return b.category === filterCategory;
   });
 
+  const handleBadgeClick = (badge: Badge) => {
+    const isUnlocked = activeStudent.unlockedBadgeIds.includes(badge.id);
+    if (!isUnlocked) {
+      // Show detail modal so student sees progress criteria
+      setSelectedBadge(badge);
+      setIsDetailModalOpen(true);
+    } else {
+      setSelectedBadge(badge);
+      setIsDetailModalOpen(true);
+      fireConfetti();
+    }
+  };
+
+  const handleClaimQuest = (quest: Quest) => {
+    if (claimedQuestIds.has(quest.id) || quest.currentProgress < quest.targetCount) return;
+
+    setClaimingQuestId(quest.id);
+
+    setTimeout(() => {
+      setClaimedQuestIds((prev) => new Set(prev).add(quest.id));
+      setClaimingQuestId(null);
+      fireConfetti();
+
+      const xpReward = quest.rewardXp || 50;
+      const coinReward = quest.rewardCoins || 20;
+
+      // Award XP & Coins through app store
+      triggerXpEvent({
+        eventId: `ev_quest_${quest.id}_${Date.now()}`,
+        studentId: activeStudent.id,
+        actionKey: 'solve_coding',
+        timestamp: new Date().toISOString(),
+        metadata: {
+          questTitle: quest.title,
+          verificationSource: 'MiraiQuest Quest Milestone Claim',
+        },
+      });
+
+      setQuestRewardToast({
+        title: quest.title,
+        xp: xpReward,
+        coins: coinReward,
+      });
+
+      setTimeout(() => setQuestRewardToast(null), 4500);
+    }, 1200);
+  };
+
+  const getQuestIcon = (iconName?: string) => {
+    switch (iconName) {
+      case 'code':
+        return <Code2 className="w-4 h-4 text-indigo-400" />;
+      case 'puzzle':
+        return <Zap className="w-4 h-4 text-amber-400" />;
+      case 'calendar':
+        return <Calendar className="w-4 h-4 text-emerald-400" />;
+      default:
+        return <Target className="w-4 h-4 text-indigo-400" />;
+    }
+  };
+
   const cardBg = isDark
     ? 'bg-slate-900 border-slate-800 text-white'
     : 'bg-white border-slate-200 text-slate-900 shadow-xs';
-  const subCardBg = isDark
-    ? 'bg-slate-950 border-slate-800'
-    : 'bg-slate-50 border-slate-200';
 
   return (
     <div className="space-y-8">
+      {/* Toast Notification for Claimed Rewards */}
+      <AnimatePresence>
+        {questRewardToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.95 }}
+            className={`fixed bottom-6 right-6 z-50 p-4 rounded-2xl border shadow-2xl flex items-center gap-3.5 ${
+              isDark ? 'bg-slate-900 border-amber-500/50 text-white' : 'bg-white border-amber-400 text-slate-900'
+            }`}
+          >
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+              <Gift className="w-5 h-5 animate-bounce" />
+            </div>
+            <div>
+              <div className="font-extrabold text-xs text-amber-400">Quest Reward Claimed!</div>
+              <div className="text-[11px] text-slate-300">
+                +{questRewardToast.xp} XP & +{questRewardToast.coins} Coins awarded for "{questRewardToast.title}".
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Badge Detail Modal */}
+      {selectedBadge && (
+        <BadgeDetailModal
+          badge={selectedBadge}
+          isOpen={isDetailModalOpen}
+          onClose={() => setIsDetailModalOpen(false)}
+          isUnlocked={activeStudent.unlockedBadgeIds.includes(selectedBadge.id)}
+          unlockedAt="Oct 14, 2026"
+          progressPercent={
+            selectedBadge.maxProgress
+              ? Math.min(100, Math.round(((selectedBadge.currentProgress || 0) / selectedBadge.maxProgress) * 100))
+              : 60
+          }
+          currentProgress={
+            selectedBadge.maxProgress
+              ? `${selectedBadge.currentProgress || 0} / ${selectedBadge.maxProgress}`
+              : undefined
+          }
+          studentName={activeStudent.name}
+          isDark={isDark}
+        />
+      )}
+
       {/* Active Quests Section */}
       <div>
         <div className="flex items-center justify-between mb-4">
@@ -63,55 +171,108 @@ export const BadgesQuestsView: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
           {quests.map((q) => {
+            const isClaimed = claimedQuestIds.has(q.id);
             const isCompleted = q.currentProgress >= q.targetCount;
             const progressPercent = Math.min(100, Math.round((q.currentProgress / q.targetCount) * 100));
+            const isClaiming = claimingQuestId === q.id;
 
             return (
               <div
                 key={q.id}
-                className={`p-4 rounded-xl border transition-all ${
+                className={`p-4 sm:p-5 rounded-2xl border transition-all flex flex-col justify-between interactive-card relative overflow-hidden ${
                   isCompleted
                     ? isDark
-                      ? 'bg-slate-900 border-emerald-500/30 text-white'
+                      ? 'bg-slate-900 border-emerald-500/40 text-white'
                       : 'bg-white border-emerald-300 text-slate-900 shadow-xs'
                     : cardBg
                 }`}
               >
-                <div className="flex items-center justify-between text-xs mb-2">
-                  <span className="text-indigo-500 font-semibold">{q.subject}</span>
-                  {isCompleted ? (
-                    <span className="text-emerald-500 font-bold flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Complete
+                {/* Top Row: Icon + Subject Tag + Completion */}
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-2.5">
+                    <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold text-[11px]">
+                      {getQuestIcon(q.icon)}
+                      <span>{q.subject}</span>
                     </span>
-                  ) : (
-                    <span className={`tabular-nums ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      {q.currentProgress}/{q.targetCount} Steps
-                    </span>
-                  )}
-                </div>
 
-                <h5 className="font-bold text-sm mb-1">{q.title}</h5>
-                <p className={`text-xs mb-4 line-clamp-2 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{q.description}</p>
+                    {isClaimed ? (
+                      <span className="text-emerald-500 font-bold flex items-center gap-1 text-[11px]">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Claimed
+                      </span>
+                    ) : isCompleted ? (
+                      <span className="text-emerald-400 font-extrabold flex items-center gap-1 text-[11px] animate-pulse">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Ready to Claim!
+                      </span>
+                    ) : (
+                      <span className={`tabular-nums text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {q.currentProgress}/{q.targetCount}
+                      </span>
+                    )}
+                  </div>
 
-                {/* Progress bar */}
-                <div className="space-y-1 mb-3">
-                  <div className={`w-full h-2 rounded-full overflow-hidden border ${
-                    isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
-                  }`}>
+                  <h5 className="font-extrabold text-sm mb-1.5 leading-snug">{q.title}</h5>
+                  <p className={`text-xs mb-4 line-clamp-2 leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                    {q.description}
+                  </p>
+
+                  {/* Gradient Progress Bar */}
+                  <div className="space-y-1 mb-4">
+                    <div className="flex justify-between text-[10px] font-semibold text-slate-400">
+                      <span>Progress</span>
+                      <span className="tabular-nums">{progressPercent}%</span>
+                    </div>
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        isCompleted ? 'bg-emerald-500' : 'bg-indigo-600'
+                      className={`w-full h-2 rounded-full overflow-hidden border ${
+                        isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
                       }`}
-                      style={{ width: `${progressPercent}%` }}
-                    />
+                    >
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ease-out ${
+                          isCompleted
+                            ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-300'
+                            : 'bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400'
+                        }`}
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className={`flex items-center justify-between text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  <span className="font-medium text-emerald-600 dark:text-emerald-400">Reward: +{q.rewardXp} XP</span>
-                  {q.expiresInDays && <span>{q.expiresInDays} days left</span>}
+                {/* Bottom Row: Rewards Chips + Claim / Status Button */}
+                <div className="pt-3 border-t border-slate-800/40 flex items-center justify-between gap-2 flex-wrap">
+                  {/* Reward Chips */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold">
+                      <Zap className="w-3 h-3 fill-current" />
+                      <span>+{q.rewardXp} XP</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[11px] font-bold">
+                      <Coins className="w-3 h-3 fill-current" />
+                      <span>+{q.rewardCoins || 20}</span>
+                    </span>
+                  </div>
+
+                  {/* Claim Button with Animated Chest */}
+                  {isCompleted && !isClaimed ? (
+                    <button
+                      onClick={() => handleClaimQuest(q)}
+                      disabled={isClaiming}
+                      className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold text-xs tracking-wide shadow-md shadow-amber-500/30 hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-75"
+                    >
+                      <Gift className={`w-3.5 h-3.5 ${isClaiming ? 'animate-spin' : 'animate-bounce'}`} />
+                      <span>{isClaiming ? 'Opening Chest...' : 'Claim Reward'}</span>
+                    </button>
+                  ) : isClaimed ? (
+                    <span className="text-xs text-slate-400 font-semibold flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Done
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> {q.expiresInDays ? `${q.expiresInDays}d left` : 'Ongoing'}
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -121,21 +282,23 @@ export const BadgesQuestsView: React.FC = () => {
 
       {/* Badges Gallery Section */}
       <div>
-        <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 border-b pb-3 ${
-          isDark ? 'border-slate-800' : 'border-slate-200'
-        }`}>
+        <div
+          className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b pb-3.5 ${
+            isDark ? 'border-slate-800' : 'border-slate-200'
+          }`}
+        >
           <div>
             <h4 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2">
               <Award className="w-4 h-4 text-emerald-500" />
-              <span>MSOT Badge Showcase</span>
+              <span>MSOT Official Badge Showcase</span>
             </h4>
             <div className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              Includes Improvement & Comeback badges so students who are behind can earn awards
+              Illustrated metallic medals with Bronze, Silver, Gold, Platinum, and Diamond rarity tiers
             </div>
           </div>
 
           {/* Filter Categories */}
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 w-full sm:w-auto">
             {[
               { id: 'all', label: 'All Badges' },
               { id: 'improvement', label: 'Improvement & Comeback' },
@@ -146,7 +309,7 @@ export const BadgesQuestsView: React.FC = () => {
               <button
                 key={cat.id}
                 onClick={() => setFilterCategory(cat.id)}
-                className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-colors ${
+                className={`px-3 py-1.5 text-xs rounded-lg font-medium whitespace-nowrap transition-colors touch-target cursor-pointer shrink-0 pressable-btn ${
                   filterCategory === cat.id
                     ? 'bg-indigo-600 text-white font-semibold shadow-xs'
                     : isDark
@@ -160,61 +323,106 @@ export const BadgesQuestsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Badge Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Badge Grid: 2 cols on mobile, 3-4 on tablet, 4-6 on laptop */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
           {filteredBadges.map((badge) => {
             const isUnlocked = activeStudent.unlockedBadgeIds.includes(badge.id);
+            const progressPercent = badge.maxProgress
+              ? Math.min(100, Math.round(((badge.currentProgress || 0) / badge.maxProgress) * 100))
+              : isUnlocked
+              ? 100
+              : 40;
+
+            const rarity: BadgeRarity = (badge.rarity as BadgeRarity) || 'bronze';
+            const shape: MedalShape = (badge.shape as MedalShape) || 'shield';
 
             return (
               <div
                 key={badge.id}
-                onClick={() => {
-                  if (isUnlocked) triggerConfetti();
-                }}
-                className={`p-4 rounded-xl border transition-all ${
+                onClick={() => handleBadgeClick(badge)}
+                className={`p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col justify-between interactive-card select-none group cursor-pointer relative ${
                   isUnlocked
                     ? isDark
-                      ? 'bg-slate-900 border-slate-700/80 hover:border-indigo-500/50 cursor-pointer shadow-sm text-white'
-                      : 'bg-white border-slate-200 hover:border-indigo-400 cursor-pointer shadow-xs text-slate-900'
+                      ? 'bg-slate-900/90 border-slate-800 hover:border-indigo-500/50 shadow-sm text-white'
+                      : 'bg-white border-slate-200 hover:border-indigo-400 shadow-xs text-slate-900'
                     : isDark
-                    ? 'bg-slate-950/60 border-slate-900 opacity-60 text-slate-400'
-                    : 'bg-slate-50 border-slate-200 opacity-60 text-slate-500'
+                    ? 'bg-slate-950/70 border-slate-900/90 text-slate-500'
+                    : 'bg-slate-50/90 border-slate-200/90 text-slate-400'
                 }`}
               >
-                <div className="flex items-start gap-3.5">
-                  <div
-                    className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border ${
-                      isUnlocked
-                        ? isDark
-                          ? 'bg-slate-800 border-slate-700 shadow-md'
-                          : 'bg-indigo-50/60 border-indigo-100 shadow-xs'
-                        : isDark
-                        ? 'bg-slate-900 border-slate-800 text-slate-600'
-                        : 'bg-slate-100 border-slate-200 text-slate-400'
+                {/* Rarity & XP Chip */}
+                <div className="flex items-center justify-between gap-1 mb-2">
+                  <span
+                    className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded border ${
+                      rarity === 'diamond'
+                        ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                        : rarity === 'platinum'
+                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+                        : rarity === 'gold'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                        : rarity === 'silver'
+                        ? 'bg-slate-500/20 text-slate-300 border-slate-500/30'
+                        : 'bg-orange-500/20 text-orange-300 border-orange-500/30'
                     }`}
                   >
-                    {isUnlocked ? getBadgeIcon(badge.icon) : <Lock className="w-5 h-5" />}
-                  </div>
+                    {rarity}
+                  </span>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1 mb-1">
-                      <h5 className="font-bold text-xs truncate">{badge.title}</h5>
-                      <span className={`text-[10px] font-semibold tabular-nums shrink-0 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                        +{badge.xpReward} XP
-                      </span>
+                  <span className="text-[10px] font-bold tabular-nums text-emerald-500">
+                    +{badge.xpReward} XP
+                  </span>
+                </div>
+
+                {/* Illustrated SVG Emblem */}
+                <div className="flex justify-center my-2">
+                  <BadgeEmblem
+                    iconType={badge.iconType || badge.title}
+                    rarity={rarity}
+                    shape={shape}
+                    size="md"
+                    isLocked={!isUnlocked}
+                  />
+                </div>
+
+                {/* Badge Title & Short Description */}
+                <div className="text-center mt-1">
+                  <h5 className="font-extrabold text-xs truncate leading-tight mb-1 flex items-center justify-center gap-1">
+                    <span>{badge.title}</span>
+                    {isUnlocked ? (
+                      <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                    ) : (
+                      <Lock className="w-2.5 h-2.5 text-slate-500 shrink-0" />
+                    )}
+                  </h5>
+                  <p className={`text-[11px] line-clamp-2 leading-snug ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    {badge.description}
+                  </p>
+                </div>
+
+                {/* Progress bar towards unlocking if locked, or unlocked status */}
+                <div className="pt-2.5 mt-2.5 border-t border-slate-800/40">
+                  {isUnlocked ? (
+                    <div className="text-center text-[10px] font-bold text-emerald-500 flex items-center justify-center gap-1">
+                      <span>✓ Unlocked</span>
                     </div>
-
-                    <p className={`text-[11px] mb-2 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                      {badge.description}
-                    </p>
-
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className={isDark ? 'text-slate-500' : 'text-slate-400'}>{badge.conditionDescription}</span>
-                      {isUnlocked && (
-                        <span className="text-emerald-500 font-semibold">UNLOCKED</span>
-                      )}
+                  ) : (
+                    <div>
+                      <div className="flex justify-between text-[9px] mb-1 font-semibold text-slate-500">
+                        <span>Progress</span>
+                        <span>
+                          {badge.currentProgress !== undefined && badge.maxProgress
+                            ? `${badge.currentProgress}/${badge.maxProgress}`
+                            : `${progressPercent}%`}
+                        </span>
+                      </div>
+                      <div className={`w-full h-1.5 rounded-full overflow-hidden ${isDark ? 'bg-slate-950' : 'bg-slate-200'}`}>
+                        <div
+                          className="h-full bg-indigo-500 rounded-full"
+                          style={{ width: `${progressPercent}%` }}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             );

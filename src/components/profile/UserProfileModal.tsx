@@ -32,7 +32,17 @@ import {
   KeyRound,
   ShieldCheck,
   Users,
+  Bell,
+  Volume2,
+  VolumeX,
+  Swords,
+  BookOpen,
+  Zap,
+  MessageSquare,
 } from 'lucide-react';
+import { StreakFlame } from '../common/StreakFlame';
+import { LeagueEmblem } from '../common/GameIcons';
+import { BadgeEmblem } from '../common/BadgeEmblem';
 
 const AVATAR_PRESETS = [
   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
@@ -66,6 +76,8 @@ export const UserProfileModal: React.FC = () => {
     requestPhoneOtp,
     verifyPhoneOtp,
     badges,
+    notificationPreferences,
+    updateNotificationPreferences,
   } = useApp();
 
   if (!isProfileModalOpen) return null;
@@ -124,7 +136,7 @@ export const UserProfileModal: React.FC = () => {
     .filter((s) => {
       if (!batchmateSearch.trim()) return true;
       const q = batchmateSearch.toLowerCase();
-      const matchName = (s.isAnonymous ? s.anonymousNickname : s.name).toLowerCase().includes(q);
+      const matchName = s.name.toLowerCase().includes(q);
       const matchRoll = s.rollNumber.toLowerCase().includes(q);
       return matchName || matchRoll;
     })
@@ -240,9 +252,9 @@ export const UserProfileModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
       <div
-        className={`w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl border shadow-2xl overflow-hidden transition-colors ${
+        className={`w-full sm:max-w-4xl h-[100dvh] sm:h-auto sm:max-h-[92vh] flex flex-col rounded-none sm:rounded-2xl border-0 sm:border shadow-2xl overflow-hidden transition-colors pb-safe ${
           isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
         }`}
       >
@@ -301,11 +313,6 @@ export const UserProfileModal: React.FC = () => {
                 <div>
                   <div className="flex items-center justify-center sm:justify-start gap-2">
                     <h2 className="text-xl font-bold">{isStudent ? targetStudent.name : targetFaculty.name}</h2>
-                    {isStudent && targetStudent.isAnonymous && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-bold border border-amber-500/30">
-                        @{targetStudent.anonymousNickname}
-                      </span>
-                    )}
                   </div>
                   <div className="text-xs text-slate-400 flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-0.5">
                     <span className="font-semibold text-indigo-500">{targetStudent.campus} Campus</span>
@@ -350,12 +357,12 @@ export const UserProfileModal: React.FC = () => {
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>{targetStudent.totalXp.toLocaleString()} XP</span>
                   </span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                    <Flame className="w-3.5 h-3.5 fill-current" />
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                    <StreakFlame streakDays={targetStudent.streakDays} size="xs" />
                     <span>{targetStudent.streakDays} Day Streak</span>
                   </span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                    <Award className="w-3.5 h-3.5" />
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                    <LeagueEmblem league={targetStudent.league} size="sm" />
                     <span>{targetStudent.league} League</span>
                   </span>
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
@@ -395,6 +402,19 @@ export const UserProfileModal: React.FC = () => {
                 {batchmatesList.length}
               </span>
             </button>
+            {isSelf && (
+              <button
+                onClick={() => setProfileActiveTab('notifications')}
+                className={`py-3 border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                  profileActiveTab === 'notifications'
+                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                    : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                }`}
+              >
+                <Bell className="w-3.5 h-3.5" />
+                <span>Notification Settings</span>
+              </button>
+            )}
           </div>
         )}
 
@@ -865,35 +885,36 @@ export const UserProfileModal: React.FC = () => {
                     )}
 
                     {otpStep === 'input_phone' ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                         <input
                           type="tel"
                           placeholder="Enter new phone number (+91...)"
                           value={newPhoneInput}
                           onChange={(e) => setNewPhoneInput(e.target.value)}
-                          className="flex-1 text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                          className="flex-1 text-xs p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                         />
                         <button
                           type="button"
                           onClick={handleRequestOtp}
-                          className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold"
+                          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold touch-target cursor-pointer shrink-0"
                         >
                           Send OTP
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                         <input
                           type="text"
-                          placeholder="Enter 6-digit OTP code"
+                          maxLength={6}
+                          placeholder="• • • • • •"
                           value={otpCodeInput}
                           onChange={(e) => setOtpCodeInput(e.target.value)}
-                          className="flex-1 text-xs p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
+                          className="flex-1 text-base sm:text-lg tracking-[0.4em] text-center font-bold font-mono p-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:tracking-normal"
                         />
                         <button
                           type="button"
                           onClick={handleVerifyOtp}
-                          className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold"
+                          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold touch-target cursor-pointer shrink-0"
                         >
                           Verify & Save
                         </button>
@@ -913,67 +934,9 @@ export const UserProfileModal: React.FC = () => {
                     <span className="text-[11px] text-slate-400">Takes effect immediately</span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {/* Anonymous Mode */}
-                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 flex flex-col justify-between space-y-2">
-                      <div>
-                        <div className="text-xs font-bold flex items-center gap-1.5">
-                          {targetStudent.isAnonymous ? (
-                            <EyeOff className="w-3.5 h-3.5 text-amber-500" />
-                          ) : (
-                            <Eye className="w-3.5 h-3.5 text-emerald-500" />
-                          )}
-                          <span>Anonymous Alias</span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-1">
-                          Show @{targetStudent.anonymousNickname} on public leaderboards.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateStudentProfile(targetStudent.id, { isAnonymous: !targetStudent.isAnonymous })
-                        }
-                        className={`w-full py-1 rounded-lg text-xs font-semibold transition-colors ${
-                          targetStudent.isAnonymous
-                            ? 'bg-amber-500 text-slate-950 font-bold'
-                            : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        {targetStudent.isAnonymous ? 'Enabled' : 'Disabled'}
-                      </button>
-                    </div>
-
-                    {/* Opt-out of Leaderboards */}
-                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 flex flex-col justify-between space-y-2">
-                      <div>
-                        <div className="text-xs font-bold flex items-center gap-1.5">
-                          <Shield className="w-3.5 h-3.5 text-indigo-500" />
-                          <span>Leaderboard Opt-Out</span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-1">
-                          Insulate personal habit from public ranking boards.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateStudentProfile(targetStudent.id, {
-                            optOutOfLeaderboards: !targetStudent.optOutOfLeaderboards,
-                          })
-                        }
-                        className={`w-full py-1 rounded-lg text-xs font-semibold transition-colors ${
-                          targetStudent.optOutOfLeaderboards
-                            ? 'bg-rose-500 text-white font-bold'
-                            : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        {targetStudent.optOutOfLeaderboards ? 'Opted Out' : 'Active In Ranks'}
-                      </button>
-                    </div>
-
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {/* Share Social Links with Batchmates */}
-                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 flex flex-col justify-between space-y-2">
+                    <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 flex flex-col justify-between space-y-2">
                       <div>
                         <div className="text-xs font-bold flex items-center gap-1.5">
                           <Globe className="w-3.5 h-3.5 text-blue-500" />
@@ -990,14 +953,30 @@ export const UserProfileModal: React.FC = () => {
                             shareSocialLinksWithBatchmates: !targetStudent.shareSocialLinksWithBatchmates,
                           })
                         }
-                        className={`w-full py-1 rounded-lg text-xs font-semibold transition-colors ${
+                        className={`w-full py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                           targetStudent.shareSocialLinksWithBatchmates
                             ? 'bg-emerald-600 text-white font-bold'
                             : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                         }`}
                       >
-                        {targetStudent.shareSocialLinksWithBatchmates ? 'Shared' : 'Private'}
+                        {targetStudent.shareSocialLinksWithBatchmates ? 'Shared with Batch' : 'Keep Links Private'}
                       </button>
+                    </div>
+
+                    {/* Cohort Privacy Notice */}
+                    <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 flex flex-col justify-between space-y-2">
+                      <div>
+                        <div className="text-xs font-bold flex items-center gap-1.5 text-indigo-500">
+                          <Shield className="w-3.5 h-3.5" />
+                          <span>Cohort Privacy Protection</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          Students only see classmates within their same campus, academic year, and section. Phone numbers are always protected.
+                        </p>
+                      </div>
+                      <div className="text-[10px] font-semibold text-slate-400 px-2 py-1 rounded bg-slate-200/60 dark:bg-slate-800/60 text-center">
+                        Strict Cohort Isolation Active
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1133,14 +1112,14 @@ export const UserProfileModal: React.FC = () => {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-1">
                             <span className="font-bold text-xs truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                              {b.isAnonymous ? b.anonymousNickname : b.name}
+                              {b.name}
                             </span>
                             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-500">
                               Lvl {b.level}
                             </span>
                           </div>
                           <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                            {b.isAnonymous ? 'Anonymous Peer' : b.rollNumber}
+                            {b.rollNumber}
                           </div>
 
                           {/* Stats */}
@@ -1151,11 +1130,7 @@ export const UserProfileModal: React.FC = () => {
                             </span>
                             <span>·</span>
                             <span>
-                              {b.optOutOfLeaderboards ? (
-                                <span className="italic text-slate-400">Private Rank</span>
-                              ) : (
-                                `${b.totalXp.toLocaleString()} XP`
-                              )}
+                              {b.totalXp.toLocaleString()} XP
                             </span>
                           </div>
                         </div>
@@ -1225,9 +1200,7 @@ export const UserProfileModal: React.FC = () => {
                         />
                         <div>
                           <h4 className="font-bold text-sm">
-                            {selectedBatchmateMiniProfile.isAnonymous
-                              ? selectedBatchmateMiniProfile.anonymousNickname
-                              : selectedBatchmateMiniProfile.name}
+                            {selectedBatchmateMiniProfile.name}
                           </h4>
                           <div className="text-[11px] text-slate-400 font-mono">
                             Section {selectedBatchmateMiniProfile.section} · {selectedBatchmateMiniProfile.year}
@@ -1284,9 +1257,16 @@ export const UserProfileModal: React.FC = () => {
                           return (
                             <span
                               key={bId}
-                              className="text-[11px] px-2 py-0.5 rounded-md font-medium bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                              className="inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-md font-medium bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
                             >
-                              🏆 {badgeObj?.title || bId}
+                              <BadgeEmblem
+                                iconType={badgeObj?.iconType || 'brackets_trophy'}
+                                shape={badgeObj?.shape || 'shield'}
+                                rarity={badgeObj?.rarity || 'bronze'}
+                                size="xs"
+                                isLocked={false}
+                              />
+                              <span>{badgeObj?.title || bId}</span>
                             </span>
                           );
                         })}
@@ -1294,12 +1274,222 @@ export const UserProfileModal: React.FC = () => {
                     </div>
 
                     {/* Privacy Guarantee Note */}
-                    <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950 text-[10px] text-slate-400 text-center">
-                      🔒 Phone numbers, emails, and dates of birth are protected by university privacy regulations.
+                    <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-950 text-[10px] text-slate-400 text-center flex items-center justify-center gap-1.5">
+                      <Lock className="w-3 h-3 text-slate-400 shrink-0" />
+                      <span>Phone numbers, emails, and dates of birth are protected by university privacy regulations.</span>
                     </div>
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB 3: Notification Settings (Students Only) */}
+          {profileActiveTab === 'notifications' && isStudent && isSelf && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+                <div>
+                  <h4 className="text-sm font-bold flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-indigo-500" />
+                    <span>Student Real-Time Alerts & Notification Center</span>
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Customize your alerts for coursework deadlines, live team battle updates, streak freezes, and peer doubt solutions.
+                  </p>
+                </div>
+              </div>
+
+              {/* Preferences Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Academic Alerts */}
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="text-xs font-bold flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
+                      <BookOpen className="w-4 h-4" />
+                      <span>Academic & Coursework</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Faculty assignment releases, approaching submission deadlines, and graded solution evaluations.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateNotificationPreferences({ academic: !notificationPreferences.academic })}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+                      notificationPreferences.academic
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    {notificationPreferences.academic ? 'Enabled' : 'Muted'}
+                  </button>
+                </div>
+
+                {/* Team Battles */}
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="text-xs font-bold flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                      <Swords className="w-4 h-4" />
+                      <span>Inter-Campus Battles</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Live arena invites, team scoreboard lead changes, and weekend cohort match completions.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateNotificationPreferences({ battles: !notificationPreferences.battles })}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+                      notificationPreferences.battles
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    {notificationPreferences.battles ? 'Enabled' : 'Muted'}
+                  </button>
+                </div>
+
+                {/* Peer Doubts & Collaboration */}
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="text-xs font-bold flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                      <MessageSquare className="w-4 h-4" />
+                      <span>Peer Doubts & Answers</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Notifications when a classmate answers your question or marks your solution as verified.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateNotificationPreferences({ doubts: !notificationPreferences.doubts })}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+                      notificationPreferences.doubts
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    {notificationPreferences.doubts ? 'Enabled' : 'Muted'}
+                  </button>
+                </div>
+
+                {/* Gamification & Streaks */}
+                <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="text-xs font-bold flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                      <Zap className="w-4 h-4" />
+                      <span>Streaks & League Alerts</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Reminders before midnight streak expiry, Freeze Shield auto-activation notices, and league promotions.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateNotificationPreferences({ gamification: !notificationPreferences.gamification })}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+                      notificationPreferences.gamification
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    {notificationPreferences.gamification ? 'Enabled' : 'Muted'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Browser Web Push Notifications */}
+              <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/50 dark:bg-indigo-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="text-xs font-bold flex items-center gap-2 text-indigo-700 dark:text-indigo-300">
+                    <Bell className="w-4 h-4" />
+                    <span>Browser Web Push Notifications</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                    Receive urgent quiz releases and battle invitations on your device even when MiraiQuest is in the background.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!notificationPreferences.pushEnabled && 'Notification' in window) {
+                      try {
+                        const perm = await Notification.requestPermission();
+                        if (perm === 'granted') {
+                          updateNotificationPreferences({ pushEnabled: true });
+                          setStatusMessage({ type: 'success', text: 'Web push notifications enabled for this device!' });
+                        } else {
+                          setStatusMessage({ type: 'error', text: 'Notification permission was denied in your browser.' });
+                        }
+                      } catch {
+                        updateNotificationPreferences({ pushEnabled: !notificationPreferences.pushEnabled });
+                      }
+                    } else {
+                      updateNotificationPreferences({ pushEnabled: !notificationPreferences.pushEnabled });
+                    }
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                    notificationPreferences.pushEnabled
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                      : 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  {notificationPreferences.pushEnabled ? 'Push Active' : 'Enable Web Push'}
+                </button>
+              </div>
+
+              {/* Quiet Hours */}
+              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-bold flex items-center gap-2">
+                      {notificationPreferences.quietHoursEnabled ? (
+                        <VolumeX className="w-4 h-4 text-purple-500" />
+                      ) : (
+                        <Volume2 className="w-4 h-4 text-slate-400" />
+                      )}
+                      <span>Study & Quiet Hours</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Temporarily silence audio rings and popups during focused lecture sessions and late nights.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateNotificationPreferences({ quietHoursEnabled: !notificationPreferences.quietHoursEnabled })}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                      notificationPreferences.quietHoursEnabled
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    {notificationPreferences.quietHoursEnabled ? 'Active' : 'Disabled'}
+                  </button>
+                </div>
+
+                {notificationPreferences.quietHoursEnabled && (
+                  <div className="flex items-center gap-3 pt-2 border-t border-slate-200 dark:border-slate-800/80 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-500">From:</span>
+                      <input
+                        type="time"
+                        value={notificationPreferences.quietHoursStart || '22:00'}
+                        onChange={(e) => updateNotificationPreferences({ quietHoursStart: e.target.value })}
+                        className="px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-500">To:</span>
+                      <input
+                        type="time"
+                        value={notificationPreferences.quietHoursEnd || '07:00'}
+                        onChange={(e) => updateNotificationPreferences({ quietHoursEnd: e.target.value })}
+                        className="px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

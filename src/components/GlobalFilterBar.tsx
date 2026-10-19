@@ -82,8 +82,8 @@ export const GlobalFilterBar: React.FC = () => {
             </span>
           </div>
 
-          {/* Desktop Filter Controls */}
-          <div className="hidden lg:flex items-center gap-2 flex-1 justify-end flex-wrap">
+          {/* Desktop & Tablet Filter Controls */}
+          <div className="hidden md:flex items-center gap-1.5 lg:gap-2 flex-1 justify-end flex-wrap">
             {/* Campus Multi-select Popover */}
             <div className="relative">
               <button
@@ -395,11 +395,11 @@ export const GlobalFilterBar: React.FC = () => {
           </div>
 
           {/* Mobile Filter Toggle Button */}
-          <div className="lg:hidden flex items-center gap-2">
+          <div className="md:hidden flex items-center gap-2">
             <button
               type="button"
               onClick={() => setMobileSheetOpen(true)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors touch-target ${
                 hasActiveFilters
                   ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
@@ -517,16 +517,16 @@ export const GlobalFilterBar: React.FC = () => {
           />
 
           {/* Drawer content */}
-          <div className="relative bg-white dark:bg-slate-900 rounded-t-2xl shadow-2xl border-t border-slate-200 dark:border-slate-800 max-h-[85vh] flex flex-col z-10 animate-in slide-in-from-bottom duration-200">
+          <div className="relative bg-white dark:bg-slate-900 rounded-t-2xl shadow-2xl border-t border-slate-200 dark:border-slate-800 max-h-[85dvh] flex flex-col z-10 pb-safe animate-in slide-in-from-bottom duration-200">
             {/* Drawer Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">Filter & Sort Students</h3>
               </div>
               <button
                 onClick={() => setMobileSheetOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="p-2 rounded-lg touch-target flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -721,18 +721,18 @@ export const GlobalFilterBar: React.FC = () => {
             </div>
 
             {/* Drawer Footer */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center gap-3">
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center gap-3 shrink-0">
               <button
                 type="button"
                 onClick={clearGlobalFilters}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                className="flex-1 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 touch-target flex items-center justify-center"
               >
                 Clear All
               </button>
               <button
                 type="button"
                 onClick={() => setMobileSheetOpen(false)}
-                className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 shadow-xs"
+                className="flex-1 py-3 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 shadow-xs touch-target flex items-center justify-center"
               >
                 Apply Filters ({filteredStudents.length})
               </button>
