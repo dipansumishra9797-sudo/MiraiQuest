@@ -48,6 +48,7 @@ export const StudentDashboard: React.FC = () => {
     setNavSection,
     openProfileModal,
     updateStudentProfile,
+    setIsFocusCriticalActive,
   } = useApp();
 
   const [activeSubTab, setActiveSubTab] = useState<
@@ -66,6 +67,15 @@ export const StudentDashboard: React.FC = () => {
 
   const [showQuizModal, setShowQuizModal] = useState(false);
   const [showBossModal, setShowBossModal] = useState(false);
+
+  // Sync focus-critical mode when quiz or boss modal is open
+  useEffect(() => {
+    if (showQuizModal || showBossModal) {
+      setIsFocusCriticalActive(true);
+      return () => setIsFocusCriticalActive(false);
+    }
+  }, [showQuizModal, showBossModal, setIsFocusCriticalActive]);
+
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
   const [freezeEffectActive, setFreezeEffectActive] = useState(false);
 

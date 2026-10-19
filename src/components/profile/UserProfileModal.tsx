@@ -78,6 +78,8 @@ export const UserProfileModal: React.FC = () => {
     badges,
     notificationPreferences,
     updateNotificationPreferences,
+    studentBgAnimationEnabled,
+    setStudentBgAnimationEnabled,
   } = useApp();
 
   if (!isProfileModalOpen) return null;
@@ -982,8 +984,8 @@ export const UserProfileModal: React.FC = () => {
                 </div>
               )}
 
-              {/* Section F: Appearance (Light / Dark Only) */}
-              <div className="space-y-3 pt-2">
+              {/* Section F: Appearance (Light / Dark Only + Background Animation) */}
+              <div className="space-y-4 pt-2">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
                     Interface Theme Mode
@@ -995,7 +997,7 @@ export const UserProfileModal: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setTheme('light')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl border text-xs font-bold transition-all ${
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                       theme === 'light'
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
                         : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
@@ -1008,7 +1010,7 @@ export const UserProfileModal: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setTheme('dark')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl border text-xs font-bold transition-all ${
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                       theme === 'dark'
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
                         : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
@@ -1018,6 +1020,47 @@ export const UserProfileModal: React.FC = () => {
                     <span>Dark Mode</span>
                   </button>
                 </div>
+
+                {/* Student Quest Background Animation Toggle */}
+                {isStudent && (
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex items-start justify-between gap-4 p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/40 dark:bg-indigo-950/20">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-500 mt-0.5 shrink-0">
+                          <Sparkles className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                            <span>Background Animation</span>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                              Quest Feel
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                            Floating gradient orbs, XP sparkles & subtle constellation lines. Automatically pauses during quizzes, tests & coding tests to maintain focus.
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setStudentBgAnimationEnabled(!studentBgAnimationEnabled)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                          studentBgAnimationEnabled ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
+                        }`}
+                        role="switch"
+                        aria-checked={studentBgAnimationEnabled}
+                        title="Toggle animated quest background on/off"
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                            studentBgAnimationEnabled ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Save / Cancel Footer for Edit Mode */}

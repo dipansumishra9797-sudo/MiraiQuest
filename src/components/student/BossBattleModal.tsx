@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../store/appStore';
 import { Crown, Sparkles, CheckCircle2, ChevronRight, X, Clock, Flame } from 'lucide-react';
 
@@ -8,7 +8,15 @@ interface BossBattleModalProps {
 }
 
 export const BossBattleModal: React.FC<BossBattleModalProps> = ({ isOpen, onClose }) => {
-  const { activeStudent, triggerXpEvent, triggerConfetti, isDark } = useApp();
+  const { activeStudent, triggerXpEvent, triggerConfetti, isDark, setIsFocusCriticalActive } = useApp();
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsFocusCriticalActive(true);
+      return () => setIsFocusCriticalActive(false);
+    }
+  }, [isOpen, setIsFocusCriticalActive]);
+
   const [currentStage, setCurrentStage] = useState(0);
   const [selectedOpt, setSelectedOpt] = useState<number | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);

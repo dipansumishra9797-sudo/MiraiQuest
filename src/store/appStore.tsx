@@ -179,6 +179,12 @@ interface AppContextType {
   clearGlobalFilters: () => void;
   filteredStudents: StudentProfile[];
   availableSections: string[];
+
+  // Student Animated Background
+  studentBgAnimationEnabled: boolean;
+  setStudentBgAnimationEnabled: (enabled: boolean) => void;
+  isFocusCriticalActive: boolean;
+  setIsFocusCriticalActive: (active: boolean) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -423,6 +429,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
+
+  // Student Background Animation Preference (saved per user, default on)
+  const [studentBgAnimationEnabled, setStudentBgAnimationEnabledState] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem(`mq_student_bg_anim_${activeStudentId}`);
+      if (stored !== null) return stored === 'true';
+    } catch {}
+    return true;
+  });
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`mq_student_bg_anim_${activeStudentId}`);
+      if (stored !== null) {
+        setStudentBgAnimationEnabledState(stored === 'true');
+      } else {
+        setStudentBgAnimationEnabledState(true);
+      }
+    } catch {}
+  }, [activeStudentId]);
+
+  const setStudentBgAnimationEnabled = (enabled: boolean) => {
+    setStudentBgAnimationEnabledState(enabled);
+    try {
+      localStorage.setItem(`mq_student_bg_anim_${activeStudentId}`, String(enabled));
+    } catch (e) {
+      console.warn('Failed to save student bg anim preference:', e);
+    }
+  };
+
+  // Focus-Critical Screen State (quizzes, compiler workspace, boss battles)
+  const [isFocusCriticalActive, setIsFocusCriticalActive] = useState<boolean>(false);
 
   // Profile Modal State
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -2176,6 +2214,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         requestPhoneOtp,
         verifyPhoneOtp,
         updateFacultyProfile,
+        studentBgAnimationEnabled,
+        setStudentBgAnimationEnabled,
+        isFocusCriticalActive,
+        setIsFocusCriticalActive,
       }}
     >
       {children}

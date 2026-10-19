@@ -14,7 +14,14 @@ interface DailyQuizModalProps {
 }
 
 export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose }) => {
-  const { questions, syllabusList, claimDailyQuizReward, isDark } = useApp();
+  const { questions, syllabusList, claimDailyQuizReward, isDark, setIsFocusCriticalActive } = useApp();
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsFocusCriticalActive(true);
+      return () => setIsFocusCriticalActive(false);
+    }
+  }, [isOpen, setIsFocusCriticalActive]);
 
   const [selectedSubject, setSelectedSubject] = useState<'dsa' | 'python'>('dsa');
   const [activeQuestions, setActiveQuestions] = useState<Question[]>([]);

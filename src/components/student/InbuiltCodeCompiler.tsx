@@ -57,7 +57,13 @@ export const InbuiltCodeCompiler: React.FC = () => {
     isDark,
     studentDrafts,
     saveStudentDraft,
+    setIsFocusCriticalActive,
   } = useApp();
+
+  useEffect(() => {
+    setIsFocusCriticalActive(true);
+    return () => setIsFocusCriticalActive(false);
+  }, [setIsFocusCriticalActive]);
 
   const [showSearchModal, setShowSearchModal] = useState<boolean>(false);
 

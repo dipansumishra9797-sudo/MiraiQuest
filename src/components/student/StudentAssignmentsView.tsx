@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../store/appStore';
 import { Assignment, AssignmentSubmission } from '../../types';
 import {
@@ -32,11 +32,19 @@ export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
     submitAssignment,
     activeStudent,
     isDark,
+    setIsFocusCriticalActive,
   } = useApp();
-
 
   // Submission modal state
   const [selectedAsgnToSubmit, setSelectedAsgnToSubmit] = useState<Assignment | null>(null);
+
+  useEffect(() => {
+    if (selectedAsgnToSubmit !== null) {
+      setIsFocusCriticalActive(true);
+      return () => setIsFocusCriticalActive(false);
+    }
+  }, [selectedAsgnToSubmit, setIsFocusCriticalActive]);
+
   const [submissionCodeOrText, setSubmissionCodeOrText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccessNotice, setSubmitSuccessNotice] = useState<string | null>(null);

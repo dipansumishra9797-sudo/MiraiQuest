@@ -72,6 +72,7 @@ export const CodingPracticeView: React.FC = () => {
     isDark,
     studentDrafts,
     saveStudentDraft,
+    setIsFocusCriticalActive,
   } = useApp();
 
   const solvedIds = useMemo(() => {
@@ -91,6 +92,14 @@ export const CodingPracticeView: React.FC = () => {
   const [activeTestTab, setActiveTestTab] = useState<number>(0);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Sync focus-critical mode when tests or submissions are executing
+  React.useEffect(() => {
+    if (isRunning || isSubmitting) {
+      setIsFocusCriticalActive(true);
+      return () => setIsFocusCriticalActive(false);
+    }
+  }, [isRunning, isSubmitting, setIsFocusCriticalActive]);
   const [runSummary, setRunSummary] = useState<RunSummary | null>(null);
   const [showHints, setShowHints] = useState<boolean>(false);
   const [feedbackToast, setFeedbackToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);

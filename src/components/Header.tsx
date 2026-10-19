@@ -62,7 +62,11 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, onOpenQ
     <>
       <header
         className={`sticky top-0 z-40 backdrop-blur-md border-b transition-colors ${
-          isDark
+          role === 'student'
+            ? isDark
+              ? 'bg-slate-950/80 border-slate-800/80 text-slate-100'
+              : 'bg-white/80 border-slate-200/80 text-slate-900 shadow-xs'
+            : isDark
             ? 'bg-slate-950/90 border-slate-800 text-slate-100'
             : 'bg-white/95 border-slate-200 text-slate-900 shadow-xs'
         }`}
