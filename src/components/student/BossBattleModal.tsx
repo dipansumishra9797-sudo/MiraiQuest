@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../store/appStore';
-import { Crown, Sparkles, CheckCircle2, ChevronRight, X, Clock, Flame } from 'lucide-react';
+import { Crown, Sparkles, CheckCircle2, ChevronRight, X, Clock } from 'lucide-react';
+import { ClosedChestIcon } from '../common/ChestIcons';
 
 interface BossBattleModalProps {
   isOpen: boolean;
@@ -8,7 +9,7 @@ interface BossBattleModalProps {
 }
 
 export const BossBattleModal: React.FC<BossBattleModalProps> = ({ isOpen, onClose }) => {
-  const { activeStudent, triggerXpEvent, triggerConfetti, isDark, setIsFocusCriticalActive } = useApp();
+  const { activeStudent, triggerXpEvent, triggerConfetti, isDark, setIsFocusCriticalActive, triggerChestReward } = useApp();
 
   useEffect(() => {
     if (isOpen) {
@@ -197,12 +198,36 @@ export const BossBattleModal: React.FC<BossBattleModalProps> = ({ isOpen, onClos
               </div>
             </div>
 
-            <button
-              onClick={onClose}
-              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-xs"
-            >
-              Back to Dashboard
-            </button>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  triggerChestReward({
+                    id: `boss_gauntlet_${Date.now()}`,
+                    title: 'Gauntlet Conquered!',
+                    subtitle: 'Mid-Term Boss Defeated · Algorithmic Invariants Cleared',
+                    rarity: 'diamond',
+                    items: [
+                      { type: 'xp', amount: 100, label: 'Boss XP' },
+                      { type: 'coins', amount: 50, label: 'Boss Coins' },
+                      { type: 'badge', label: 'Gauntlet Conqueror' },
+                    ],
+                  });
+                }}
+                className="px-6 py-2.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:brightness-110 active:scale-95 text-white rounded-xl text-xs font-bold shadow-lg shadow-amber-500/30 flex items-center gap-2 cursor-pointer"
+              >
+                <ClosedChestIcon size={18} rarity="diamond" glow={true} />
+                <span>Claim Diamond Chest (+100 XP)</span>
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 text-xs font-semibold text-slate-400 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
           </div>
         )}
       </div>

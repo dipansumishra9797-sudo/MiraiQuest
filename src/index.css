@@ -390,18 +390,21 @@ html.dark, .dark {
 }
 
 .flame-outer-layer {
-  transform-origin: 50px 115px;
+  transform-box: view-box;
+  transform-origin: 50px 118px;
   animation: flameOuterSway 1.8s infinite ease-in-out;
 }
 
 .flame-mid-layer {
+  transform-box: view-box;
   transform-origin: 50px 106px;
-  animation: flameMidSway 1.3s infinite ease-in-out;
+  animation: flameMidSway 1.25s infinite ease-in-out;
 }
 
 .flame-core-layer {
+  transform-box: view-box;
   transform-origin: 50px 100px;
-  animation: flameCorePulse 0.9s infinite ease-in-out;
+  animation: flameCorePulse 0.75s infinite ease-in-out;
 }
 
 .ember-1 { animation: emberFloat1 2.1s infinite ease-out 0.2s; }
@@ -409,6 +412,7 @@ html.dark, .dark {
 .ember-3 { animation: emberFloat3 1.9s infinite ease-out 1.3s; }
 .ember-4 { animation: emberFloat4 2.4s infinite ease-out 0.5s; }
 .ember-5 { animation: emberFloat2 2.2s infinite ease-out 1.1s; }
+.ember-6 { animation: emberFloat1 2.5s infinite ease-out 1.5s; }
 
 @keyframes haloPulse {
   0%, 100% { opacity: 0.65; transform: scale(1.4); }
@@ -493,18 +497,24 @@ html.dark, .dark {
     transform: scale(0.4) translateY(10px);
     opacity: 0.8;
   }
-  50% {
-    transform: scale(1.1) translateY(-8px);
-    opacity: 0.45;
+  45% {
+    transform: scale(0.95) translateY(-3px);
+    opacity: 0.5;
+  }
+  75% {
+    transform: scale(1.3) translateY(-14px);
+    opacity: 0.25;
   }
   100% {
-    transform: scale(1.6) translateY(-20px);
+    transform: scale(1.65) translateY(-24px);
     opacity: 0;
   }
 }
 
 .animate-smoke-puff {
-  animation: smokePuff 2.5s infinite ease-out;
+  transform-box: view-box;
+  transform-origin: 50px 70px;
+  animation: smokePuff 2.4s infinite ease-out;
 }
 
 @keyframes spinSlow {
@@ -516,14 +526,74 @@ html.dark, .dark {
   animation: spinSlow 12s infinite linear;
 }
 
-@keyframes fireFill {
+@keyframes fireIgniteFill {
   0% {
-    background-size: 100% 0%;
-    background-position: bottom;
+    clip-path: inset(100% 0 0 0);
+    opacity: 0.3;
+    transform: scale(0.96);
+    filter: brightness(1.4);
+  }
+  50% {
+    clip-path: inset(25% 0 0 0);
+    opacity: 0.95;
+    filter: brightness(1.3);
   }
   100% {
-    background-size: 100% 100%;
-    background-position: bottom;
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+.animate-fire-fill {
+  animation: fireIgniteFill 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes frostSpread {
+  0% {
+    clip-path: circle(0% at 50% 50%);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    clip-path: circle(150% at 50% 50%);
+    opacity: 0.95;
+  }
+}
+
+.animate-frost-spread {
+  animation: frostSpread 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes todayCellPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.45);
+    border-color: rgba(99, 102, 241, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(99, 102, 241, 0);
+    border-color: rgba(99, 102, 241, 1);
+  }
+}
+
+.animate-today-pulse {
+  animation: todayCellPulse 2s infinite ease-in-out;
+}
+
+@keyframes flyingXpTrail {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(var(--tx, 140px), var(--ty, -260px)) scale(0.2);
+    opacity: 0;
   }
 }
 
@@ -566,109 +636,347 @@ html.dark, .dark {
   animation: badgePop 0.65s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
-/* Student Portal Animated Quest Background Orbs */
+/* Student Portal Animated Quest Background Orbs (Loops of 12 to 25 seconds) */
 @keyframes orbDrift1 {
   0% {
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
   }
   33% {
-    transform: translate3d(120px, 80px, 0) scale(1.15);
+    transform: translate3d(90px, 60px, 0) scale(1.18) rotate(4deg);
   }
   66% {
-    transform: translate3d(60px, 160px, 0) scale(0.9);
+    transform: translate3d(40px, 120px, 0) scale(0.92) rotate(-3deg);
   }
   100% {
-    transform: translate3d(-40px, 60px, 0) scale(1.05);
+    transform: translate3d(-50px, 50px, 0) scale(1.08) rotate(2deg);
   }
 }
 
 @keyframes orbDrift2 {
   0% {
-    transform: translate3d(0, 0, 0) scale(1.05);
+    transform: translate3d(0, 0, 0) scale(1.05) rotate(0deg);
   }
   33% {
-    transform: translate3d(-140px, 90px, 0) scale(0.88);
+    transform: translate3d(-110px, 70px, 0) scale(0.88) rotate(-5deg);
   }
   66% {
-    transform: translate3d(-70px, -60px, 0) scale(1.18);
+    transform: translate3d(-60px, -50px, 0) scale(1.2) rotate(3deg);
   }
   100% {
-    transform: translate3d(40px, -40px, 0) scale(0.96);
+    transform: translate3d(50px, -30px, 0) scale(0.95) rotate(-2deg);
   }
 }
 
 @keyframes orbDrift3 {
   0% {
-    transform: translate3d(0, 0, 0) scale(0.95);
+    transform: translate3d(0, 0, 0) scale(0.94) rotate(0deg);
   }
   40% {
-    transform: translate3d(90px, -110px, 0) scale(1.12);
+    transform: translate3d(80px, -90px, 0) scale(1.16) rotate(4deg);
   }
   75% {
-    transform: translate3d(-50px, -70px, 0) scale(0.92);
+    transform: translate3d(-40px, -60px, 0) scale(0.9) rotate(-4deg);
   }
   100% {
-    transform: translate3d(60px, 40px, 0) scale(1.04);
+    transform: translate3d(50px, 35px, 0) scale(1.06) rotate(1deg);
   }
 }
 
 @keyframes orbDrift4 {
   0% {
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
   }
   35% {
-    transform: translate3d(-110px, -80px, 0) scale(1.2);
+    transform: translate3d(-90px, -70px, 0) scale(1.22) rotate(-3deg);
   }
   70% {
-    transform: translate3d(80px, -40px, 0) scale(0.85);
+    transform: translate3d(70px, -35px, 0) scale(0.86) rotate(4deg);
   }
   100% {
-    transform: translate3d(-30px, 50px, 0) scale(1.08);
+    transform: translate3d(-25px, 45px, 0) scale(1.1) rotate(-1deg);
   }
 }
 
 @keyframes orbPulse {
   0% {
-    transform: translate3d(0, 0, 0) scale(0.92);
-    opacity: 0.7;
+    transform: translate3d(0, 0, 0) scale(0.9);
+    opacity: 0.75;
   }
   50% {
-    transform: translate3d(30px, -20px, 0) scale(1.12);
+    transform: translate3d(25px, -18px, 0) scale(1.15);
     opacity: 1;
   }
   100% {
-    transform: translate3d(-20px, 30px, 0) scale(0.95);
-    opacity: 0.75;
+    transform: translate3d(-18px, 25px, 0) scale(0.94);
+    opacity: 0.8;
+  }
+}
+
+@keyframes auroraMesh {
+  0% {
+    filter: hue-rotate(0deg);
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    filter: hue-rotate(28deg);
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    filter: hue-rotate(0deg);
+    opacity: 0.85;
+    transform: scale(1);
   }
 }
 
 .animate-orb-1 {
-  animation: orbDrift1 36s ease-in-out infinite alternate;
+  animation: orbDrift1 16s ease-in-out infinite alternate;
   will-change: transform;
 }
 
 .animate-orb-2 {
-  animation: orbDrift2 48s ease-in-out infinite alternate;
+  animation: orbDrift2 20s ease-in-out infinite alternate;
   will-change: transform;
 }
 
 .animate-orb-3 {
-  animation: orbDrift3 56s ease-in-out infinite alternate;
+  animation: orbDrift3 18s ease-in-out infinite alternate;
   will-change: transform;
 }
 
 .animate-orb-4 {
-  animation: orbDrift4 42s ease-in-out infinite alternate;
+  animation: orbDrift4 22s ease-in-out infinite alternate;
   will-change: transform;
 }
 
 .animate-orb-pulse {
-  animation: orbPulse 28s ease-in-out infinite alternate;
+  animation: orbPulse 13s ease-in-out infinite alternate;
   will-change: transform, opacity;
+}
+
+.animate-aurora {
+  animation: auroraMesh 18s ease-in-out infinite alternate;
+  will-change: filter, transform;
+}
+
+/* Mirai Japanese-Futuristic Scene Keyframes */
+@keyframes toriiBob {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(0.4deg);
+  }
+}
+
+@keyframes droneFlyAcross {
+  0% {
+    transform: translateX(-80px) translateY(0);
+    opacity: 0;
+  }
+  8% { opacity: 0.9; }
+  92% { opacity: 0.9; }
+  100% {
+    transform: translateX(110vw) translateY(22px);
+    opacity: 0;
+  }
+}
+
+@keyframes shootingStarArc {
+  0% {
+    transform: translate(0, 0) scale(0.6);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(280px, 140px) scale(1.4);
+    opacity: 0;
+  }
+}
+
+@keyframes gridPerspectiveScroll {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 0 40px;
+  }
+}
+
+@keyframes kanjiFloatDrift {
+  0%, 100% {
+    transform: translateY(0) scale(1) rotate(0deg);
+    opacity: 0.055;
+  }
+  50% {
+    transform: translateY(-16px) scale(1.04) rotate(0.8deg);
+    opacity: 0.085;
+  }
+}
+
+@keyframes miraiSunPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.92;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+}
+
+@keyframes gamifiedDriftUp {
+  0% {
+    transform: translateY(105vh) translateX(0) scale(0.85);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.6;
+  }
+  85% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-8vh) translateX(28px) scale(1.05);
+    opacity: 0;
+  }
+}
+
+@keyframes gameShapeDrift {
+  0% {
+    transform: translateY(105vh) translateX(0) rotate(0deg) scale(0.9);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.22;
+  }
+  88% {
+    opacity: 0.22;
+  }
+  100% {
+    transform: translateY(-10vh) translateX(35px) rotate(25deg) scale(1.05);
+    opacity: 0;
+  }
+}
+
+.animate-gamified-drift {
+  animation: gamifiedDriftUp linear infinite;
+  will-change: transform, opacity;
+}
+
+.animate-game-shape {
+  animation: gameShapeDrift linear infinite;
+  will-change: transform, opacity;
+}
+
+.animate-torii {
+  animation: toriiBob 18s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-drone {
+  animation: droneFlyAcross 24s linear infinite;
+  will-change: transform;
+}
+
+.animate-drone-2 {
+  animation: droneFlyAcross 34s linear infinite 14s;
+  will-change: transform;
+}
+
+.animate-shooting-star {
+  animation: shootingStarArc 14s ease-out infinite 4s;
+  will-change: transform, opacity;
+}
+
+.animate-kanji {
+  animation: kanjiFloatDrift 22s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.animate-sun-pulse {
+  animation: miraiSunPulse 16s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.mirai-grid-floor {
+  background-size: 40px 40px;
+  animation: gridPerspectiveScroll 2.8s linear infinite;
+  will-change: background-position;
 }
 
 .orb-paused {
   animation-play-state: paused !important;
+}
+
+/* ── Student Portal Glass Surfaces (WCAG AA Contrast Compliant) ── */
+.student-portal .glass-card,
+.student-portal .interactive-card,
+.student-portal .student-card,
+.student-portal .rounded-2xl.border,
+.student-portal .rounded-xl.border {
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+.student-portal.light .glass-card,
+.student-portal.light .interactive-card,
+.student-portal.light .student-card,
+.student-portal.light .rounded-2xl.border,
+.student-portal.light .rounded-xl.border,
+.light .student-portal .glass-card,
+.light .student-portal .interactive-card,
+.light .student-portal .student-card,
+.light .student-portal .rounded-2xl.border,
+.light .student-portal .rounded-xl.border {
+  background: rgba(255, 255, 255, 0.72) !important;
+  border-color: rgba(226, 232, 240, 0.8) !important;
+  box-shadow: 0 4px 20px -2px rgba(99, 102, 241, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.04) !important;
+}
+
+.student-portal.dark .glass-card,
+.student-portal.dark .interactive-card,
+.student-portal.dark .student-card,
+.student-portal.dark .rounded-2xl.border,
+.student-portal.dark .rounded-xl.border,
+.dark .student-portal .glass-card,
+.dark .student-portal .interactive-card,
+.dark .student-portal .student-card,
+.dark .student-portal .rounded-2xl.border,
+.dark .student-portal .rounded-xl.border {
+  background: rgba(15, 23, 42, 0.65) !important;
+  border-color: rgba(51, 65, 85, 0.65) !important;
+  box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+}
+
+.student-portal.light .glass-tile,
+.student-portal.light .rounded-xl.border.bg-slate-50,
+.student-portal.light .rounded-lg.border.bg-slate-50,
+.light .student-portal .glass-tile,
+.light .student-portal .rounded-xl.border.bg-slate-50,
+.light .student-portal .rounded-lg.border.bg-slate-50 {
+  background: rgba(255, 255, 255, 0.62) !important;
+  border-color: rgba(226, 232, 240, 0.75) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+}
+
+.student-portal.dark .glass-tile,
+.student-portal.dark .rounded-xl.border.bg-slate-950,
+.student-portal.dark .rounded-lg.border.bg-slate-950,
+.dark .student-portal .glass-tile,
+.dark .student-portal .rounded-xl.border.bg-slate-950,
+.dark .student-portal .rounded-lg.border.bg-slate-950 {
+  background: rgba(2, 6, 23, 0.55) !important;
+  border-color: rgba(51, 65, 85, 0.55) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
 }
 
 /* Accessibility: Respect Reduced Motion Preference */
@@ -695,6 +1003,7 @@ html.dark, .dark {
   .ember-3,
   .ember-4,
   .ember-5,
+  .ember-6,
   .animate-halo-pulse,
   .animate-shockwave,
   .animate-flame-at-risk,
@@ -704,13 +1013,34 @@ html.dark, .dark {
   .animate-smoke-puff,
   .animate-spin-slow,
   .animate-fire-fill,
+  .animate-frost-spread,
+  .animate-today-pulse,
   .animate-orb-1,
   .animate-orb-2,
   .animate-orb-3,
   .animate-orb-4,
-  .animate-orb-pulse {
+  .animate-orb-pulse,
+  .animate-torii,
+  .animate-drone,
+  .animate-drone-2,
+  .animate-shooting-star,
+  .animate-kanji,
+  .animate-sun-pulse,
+  .animate-gamified-drift,
+  .animate-game-shape,
+  .mirai-grid-floor {
     animation: none !important;
   }
+}
+
+/* ── Transparent Wrappers for Student Portal ── */
+body.student-portal-active,
+body.student-portal-active #root,
+.student-portal-active #root,
+body:has(.student-portal),
+#root:has(.student-portal) {
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
 

@@ -93,10 +93,10 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
 
   return (
     <nav
-      className={`fixed bottom-0 inset-x-0 z-40 sm:hidden border-t backdrop-blur-lg transition-colors select-none ${
+      className={`fixed bottom-0 inset-x-0 z-40 sm:hidden border-t backdrop-blur-xl transition-colors select-none ${
         isDark
-          ? 'bg-slate-950/95 border-slate-800/90 text-slate-300'
-          : 'bg-white/95 border-slate-200 text-slate-700 shadow-lg'
+          ? 'bg-slate-950/70 border-slate-800/60 text-slate-300'
+          : 'bg-white/70 border-slate-200/60 text-slate-700 shadow-lg'
       }`}
       style={{
         paddingBottom: 'max(0.35rem, env(safe-area-inset-bottom, 0px))',

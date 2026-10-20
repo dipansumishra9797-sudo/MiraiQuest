@@ -12,9 +12,19 @@ import { DailyQuizModal } from './components/student/DailyQuizModal';
 import { UserProfileModal } from './components/profile/UserProfileModal';
 import { BottomNavBar } from './components/BottomNavBar';
 import { StudentAnimatedBackground } from './components/common/StudentAnimatedBackground';
+import { RewardChestModal } from './components/common/RewardChestModal';
+import { OpenSourceGuideView } from './components/OpenSourceGuideView';
 
 const AppContent: React.FC = () => {
-  const { role, isDark, navSection, setNavSection, setIsFocusCriticalActive } = useApp();
+  const {
+    role,
+    isDark,
+    navSection,
+    setNavSection,
+    setIsFocusCriticalActive,
+    activeChestReward,
+    closeChestReward,
+  } = useApp();
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [showDirectQuiz, setShowDirectQuiz] = useState<boolean>(false);
 
@@ -25,6 +35,59 @@ const AppContent: React.FC = () => {
       return () => setIsFocusCriticalActive(false);
     }
   }, [showDirectQuiz, setIsFocusCriticalActive]);
+
+  // Sync pathname with /open-source-guide (Student and Faculty only; Admin is redirected to home)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname === '/open-source-guide') {
+        if (role === 'admin') {
+          window.history.replaceState({}, '', '/');
+          setNavSection('admin:rules');
+        } else {
+          setNavSection('open_source_guide');
+        }
+      }
+
+      const handlePopState = () => {
+        if (window.location.pathname === '/open-source-guide') {
+          if (role === 'admin') {
+            window.history.replaceState({}, '', '/');
+            setNavSection('admin:rules');
+          } else {
+            setNavSection('open_source_guide');
+          }
+        } else if (navSection === 'open_source_guide') {
+          setNavSection(role === 'faculty' ? 'faculty:analytics' : 'dashboard:overview');
+        }
+      };
+
+      window.addEventListener('popstate', handlePopState);
+      return () => window.removeEventListener('popstate', handlePopState);
+    }
+  }, [role, setNavSection, navSection]);
+
+  // Update browser URL when navSection changes to /open-source-guide or away; redirect admin immediately
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (navSection === 'open_source_guide') {
+        if (role === 'admin') {
+          window.history.replaceState({}, '', '/');
+          setNavSection('admin:rules');
+        } else if (window.location.pathname !== '/open-source-guide') {
+          window.history.pushState({}, '', '/open-source-guide');
+        }
+      } else if (window.location.pathname === '/open-source-guide') {
+        window.history.pushState({}, '', '/');
+      }
+    }
+  }, [navSection, role, setNavSection]);
+
+  // Redirect legacy admin observability route to admin rules
+  useEffect(() => {
+    if (navSection === 'admin:observability') {
+      setNavSection('admin:rules');
+    }
+  }, [navSection, setNavSection]);
 
   // Sync navSection with currentTab
   const handleTabChange = (tab: string) => {
@@ -53,8 +116,8 @@ const AppContent: React.FC = () => {
       className={`min-h-screen min-h-[100dvh] flex flex-col font-sans transition-colors duration-300 selection:bg-indigo-500 selection:text-white relative ${
         role === 'student'
           ? isDark
-            ? 'bg-transparent text-slate-100'
-            : 'bg-transparent text-slate-900'
+            ? 'student-portal dark bg-transparent text-slate-100'
+            : 'student-portal light bg-transparent text-slate-900'
           : isDark
           ? 'bg-slate-950 text-slate-100'
           : 'bg-[#F6F7FB] text-slate-900'
@@ -83,13 +146,12 @@ const AppContent: React.FC = () => {
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className="w-full"
           >
-            {/* Faculty Perspective */}
-            {role === 'faculty' && (
+            {/* Open Source Guide View (Accessible only for Student & Faculty; Admin forbidden) */}
+            {navSection === 'open_source_guide' && role !== 'admin' ? (
+              <OpenSourceGuideView />
+            ) : role === 'faculty' ? (
               isFacultyBattles ? <TeamBattlesView /> : <FacultyDashboard />
-            )}
-
-            {/* Admin Perspective */}
-            {role === 'admin' && (
+            ) : role === 'admin' ? (
               isAdminLeagues ? (
                 <LeaguesLeaderboard />
               ) : isAdminBattles ? (
@@ -97,10 +159,7 @@ const AppContent: React.FC = () => {
               ) : (
                 <AdminDashboard />
               )
-            )}
-
-            {/* Student Perspective */}
-            {role === 'student' && (
+            ) : role === 'student' ? (
               isStudentLeagues ? (
                 <LeaguesLeaderboard />
               ) : isStudentBattles ? (
@@ -108,7 +167,7 @@ const AppContent: React.FC = () => {
               ) : (
                 <StudentDashboard />
               )
-            )}
+            ) : null}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -121,6 +180,17 @@ const AppContent: React.FC = () => {
         <>
           <LevelAscensionModal />
           <DailyQuizModal isOpen={showDirectQuiz} onClose={() => setShowDirectQuiz(false)} />
+          {activeChestReward && (
+            <RewardChestModal
+              isOpen={activeChestReward.isOpen}
+              onClose={closeChestReward}
+              title={activeChestReward.title}
+              subtitle={activeChestReward.subtitle}
+              rarity={activeChestReward.rarity}
+              items={activeChestReward.items}
+              onFlyComplete={activeChestReward.onFlyComplete}
+            />
+          )}
         </>
       )}
 

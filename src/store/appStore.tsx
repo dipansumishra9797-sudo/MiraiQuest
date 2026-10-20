@@ -47,6 +47,9 @@ import { CODING_PROBLEMS, CodingProblem } from '../data/codingProblems';
 import { ALL_INITIAL_CODING_CATALOG, TopicProblemItem } from '../data/codingPracticeCatalog';
 import { calculateLevelFromXp, processXpEvent, XpEvent } from '../modules/xpEngine';
 import confetti from 'canvas-confetti';
+import { soundManager } from '../utils/soundEffects';
+
+export type StudentBgStyle = 'mirai' | 'sakura' | 'gradient' | 'off' | 'all' | 'orbs' | 'particles' | 'aurora';
 
 interface AppContextType {
   role: UserRole;
@@ -183,8 +186,33 @@ interface AppContextType {
   // Student Animated Background
   studentBgAnimationEnabled: boolean;
   setStudentBgAnimationEnabled: (enabled: boolean) => void;
+  studentBgStyle: StudentBgStyle;
+  setStudentBgStyle: (style: StudentBgStyle) => void;
   isFocusCriticalActive: boolean;
   setIsFocusCriticalActive: (active: boolean) => void;
+
+  // Sound Effects Preference
+  soundEffectsEnabled: boolean;
+  setSoundEffectsEnabled: (enabled: boolean) => void;
+
+  // Chest Reward Animation System
+  claimedRewardIds: string[];
+  activeChestReward: any | null;
+  headerPulseTrigger: number;
+  triggerChestReward: (config: {
+    id: string;
+    title?: string;
+    subtitle?: string;
+    rarity?: 'bronze' | 'silver' | 'gold' | 'diamond';
+    items: {
+      type: 'xp' | 'coins' | 'badge' | 'freeze' | 'item';
+      amount?: number;
+      label: string;
+      badgeName?: string;
+    }[];
+    onFlyComplete?: () => void;
+  }) => boolean;
+  closeChestReward: () => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -439,24 +467,192 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   });
 
+  const [studentBgStyle, setStudentBgStyleState] = useState<StudentBgStyle>(() => {
+    try {
+      const stored = localStorage.getItem(`mq_student_bg_style_${activeStudentId}`);
+      if (stored && ['all', 'orbs', 'particles', 'aurora', 'mirai', 'sakura', 'off'].includes(stored)) {
+        return stored as StudentBgStyle;
+      }
+    } catch {}
+    return 'all'; // Default: Orbs plus Particles
+  });
+
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(`mq_student_bg_anim_${activeStudentId}`);
-      if (stored !== null) {
-        setStudentBgAnimationEnabledState(stored === 'true');
+      const storedStyle = localStorage.getItem(`mq_student_bg_style_${activeStudentId}`);
+      if (storedStyle && ['all', 'orbs', 'particles', 'aurora', 'mirai', 'sakura', 'off'].includes(storedStyle)) {
+        setStudentBgStyleState(storedStyle as StudentBgStyle);
+        setStudentBgAnimationEnabledState(storedStyle !== 'off');
       } else {
-        setStudentBgAnimationEnabledState(true);
+        const storedAnim = localStorage.getItem(`mq_student_bg_anim_${activeStudentId}`);
+        const isAnim = storedAnim !== null ? storedAnim === 'true' : true;
+        setStudentBgAnimationEnabledState(isAnim);
+        setStudentBgStyleState(isAnim ? 'all' : 'off');
       }
     } catch {}
   }, [activeStudentId]);
 
   const setStudentBgAnimationEnabled = (enabled: boolean) => {
     setStudentBgAnimationEnabledState(enabled);
+    const newStyle: StudentBgStyle = enabled ? (studentBgStyle === 'off' ? 'all' : studentBgStyle) : 'off';
+    setStudentBgStyleState(newStyle);
     try {
       localStorage.setItem(`mq_student_bg_anim_${activeStudentId}`, String(enabled));
+      localStorage.setItem(`mq_student_bg_style_${activeStudentId}`, newStyle);
     } catch (e) {
       console.warn('Failed to save student bg anim preference:', e);
     }
+  };
+
+  const setStudentBgStyle = (style: StudentBgStyle) => {
+    setStudentBgStyleState(style);
+    const enabled = style !== 'off';
+    setStudentBgAnimationEnabledState(enabled);
+    try {
+      localStorage.setItem(`mq_student_bg_style_${activeStudentId}`, style);
+      localStorage.setItem(`mq_student_bg_anim_${activeStudentId}`, String(enabled));
+    } catch (e) {
+      console.warn('Failed to save student bg style preference:', e);
+    }
+  };
+
+  // Sound Effects Preference (default OFF as requested)
+  const [soundEffectsEnabled, setSoundEffectsEnabledState] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem('mq_sound_fx');
+      return stored === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const setSoundEffectsEnabled = (enabled: boolean) => {
+    setSoundEffectsEnabledState(enabled);
+    soundManager.setMuted(!enabled);
+    try {
+      localStorage.setItem('mq_sound_fx', String(enabled));
+    } catch (e) {
+      console.warn('Failed to save sound fx preference:', e);
+    }
+  };
+
+  useEffect(() => {
+    soundManager.setMuted(!soundEffectsEnabled);
+  }, [soundEffectsEnabled]);
+
+  // Claimed Rewards Tracking (Guarantees backend safety - never claim twice)
+  const [claimedRewardIds, setClaimedRewardIds] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(`mq_claimed_rewards_${activeStudentId}`);
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return [];
+  });
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`mq_claimed_rewards_${activeStudentId}`);
+      if (stored) setClaimedRewardIds(JSON.parse(stored));
+      else setClaimedRewardIds([]);
+    } catch {}
+  }, [activeStudentId]);
+
+  // Active Chest Modal State
+  const [activeChestReward, setActiveChestReward] = useState<{
+    isOpen: boolean;
+    title: string;
+    subtitle?: string;
+    rarity: 'bronze' | 'silver' | 'gold' | 'diamond';
+    items: {
+      type: 'xp' | 'coins' | 'badge' | 'freeze' | 'item';
+      amount?: number;
+      label: string;
+      badgeName?: string;
+    }[];
+    onFlyComplete?: () => void;
+  } | null>(null);
+
+  const [headerPulseTrigger, setHeaderPulseTrigger] = useState<number>(0);
+
+  const triggerChestReward = (config: {
+    id: string;
+    title?: string;
+    subtitle?: string;
+    rarity?: 'bronze' | 'silver' | 'gold' | 'diamond';
+    items: {
+      type: 'xp' | 'coins' | 'badge' | 'freeze' | 'item';
+      amount?: number;
+      label: string;
+      badgeName?: string;
+    }[];
+    onFlyComplete?: () => void;
+  }): boolean => {
+    // Backend Safety Check: prevent double claim
+    if (claimedRewardIds.includes(config.id)) {
+      return false;
+    }
+
+    // 1. Mark as claimed in state & local storage immediately
+    const nextClaimed = [...claimedRewardIds, config.id];
+    setClaimedRewardIds(nextClaimed);
+    try {
+      localStorage.setItem(`mq_claimed_rewards_${activeStudentId}`, JSON.stringify(nextClaimed));
+    } catch (e) {
+      console.warn('Failed to save claimed reward:', e);
+    }
+
+    // 2. Grant rewards immediately into Student Profile & Ledger
+    let totalXp = 0;
+    let totalCoins = 0;
+    config.items.forEach((item) => {
+      if (item.type === 'xp' && item.amount) totalXp += item.amount;
+      if (item.type === 'coins' && item.amount) totalCoins += item.amount;
+    });
+
+    if (totalXp > 0) {
+      triggerXpEvent({
+        eventId: `ev_chest_${config.id}_${Date.now()}`,
+        studentId: activeStudentId,
+        actionKey: 'solve_coding',
+        timestamp: new Date().toISOString(),
+        metadata: {
+          rewardTitle: config.title || 'Chest Reward Claim',
+          xpAwarded: totalXp,
+          coinsAwarded: totalCoins,
+        },
+      });
+    }
+
+    if (totalCoins > 0) {
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === activeStudentId
+            ? { ...s, coinsBalance: (s.coinsBalance || 0) + totalCoins }
+            : s
+        )
+      );
+    }
+
+    // 3. Open Chest Reward Modal
+    setActiveChestReward({
+      isOpen: true,
+      title: config.title || 'Reward Unlocked!',
+      subtitle: config.subtitle || 'Congratulations on completing this quest!',
+      rarity:
+        config.rarity ||
+        (totalXp >= 100 ? 'diamond' : totalXp >= 60 ? 'gold' : totalXp >= 30 ? 'silver' : 'bronze'),
+      items: config.items,
+      onFlyComplete: () => {
+        setHeaderPulseTrigger((c) => c + 1);
+        if (config.onFlyComplete) config.onFlyComplete();
+      },
+    });
+
+    return true;
+  };
+
+  const closeChestReward = () => {
+    setActiveChestReward(null);
   };
 
   // Focus-Critical Screen State (quizzes, compiler workspace, boss battles)
@@ -2216,8 +2412,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateFacultyProfile,
         studentBgAnimationEnabled,
         setStudentBgAnimationEnabled,
+        studentBgStyle,
+        setStudentBgStyle,
         isFocusCriticalActive,
         setIsFocusCriticalActive,
+        soundEffectsEnabled,
+        setSoundEffectsEnabled,
+        claimedRewardIds,
+        activeChestReward,
+        headerPulseTrigger,
+        triggerChestReward,
+        closeChestReward,
       }}
     >
       {children}

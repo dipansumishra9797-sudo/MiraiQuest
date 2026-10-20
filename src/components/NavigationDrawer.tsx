@@ -21,6 +21,7 @@ import {
   Clock,
   Sliders,
   AlertTriangle,
+  GitPullRequest,
   Sun,
   Moon,
   CheckCircle2,
@@ -28,7 +29,6 @@ import {
   ChevronRight,
   UserCheck,
   RefreshCw,
-  Activity,
 } from 'lucide-react';
 
 interface NavigationDrawerProps {
@@ -91,6 +91,16 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ onOpenQuizMo
       return;
     }
 
+    if (sectionId === 'open_source_guide') {
+      setIsDrawerOpen(false);
+      if (role === 'admin') {
+        setNavSection('admin:rules');
+        return;
+      }
+      setNavSection('open_source_guide');
+      return;
+    }
+
     if (sectionId === 'logout') {
       // Prompt role switcher or switch to student default
       setIsDrawerOpen(false);
@@ -113,6 +123,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ onOpenQuizMo
     { id: 'dashboard:ledger', label: 'Verifiable Ledger', icon: ShieldCheck, badge: 'Audit' },
     { id: 'dashboard:badges', label: 'Badges and Quests', icon: Sparkles },
     { id: 'dashboard:coding', label: 'Coding Practice', icon: Code, badge: '16 Topics' },
+    { id: 'open_source_guide', label: 'Open Source Guide', icon: GitPullRequest, badge: 'FirstPR' },
     { id: 'dashboard:peer_help', label: 'Peer Doubts', icon: Users },
     { id: 'dashboard:store', label: 'Perks Store', icon: ShoppingBag, badge: `${activeStudent.coinsBalance} Coins` },
     { id: 'dashboard:profile', label: 'Profile & Settings', icon: User },
@@ -125,6 +136,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ onOpenQuizMo
     { id: 'faculty:assignments', label: 'Assignment Management', icon: FileText, badge: 'Upload & Review' },
     { id: 'faculty:syllabus', label: 'My Classes', icon: BookOpen },
     { id: 'faculty:questions', label: 'Question Bank', icon: HelpCircle },
+    { id: 'open_source_guide', label: 'Open Source Guide', icon: GitPullRequest, badge: 'FirstPR' },
     { id: 'faculty:ai_queue', label: 'AI Approval Queue', icon: Sparkles, badge: 'Review' },
     { id: 'faculty:audit', label: 'XP Audit', icon: ShieldCheck },
     { id: 'faculty:quiet', label: 'Engagement', icon: Clock, badge: 'At-Risk' },
@@ -141,7 +153,6 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ onOpenQuizMo
     { id: 'admin:battles', label: 'Battles', icon: Swords },
     { id: 'admin:rewards', label: 'Rewards', icon: ShoppingBag },
     { id: 'admin:users', label: 'Users', icon: Users, badge: 'Directory' },
-    { id: 'admin:observability', label: 'AI Observability', icon: Activity, badge: 'Live Tiler' },
     { id: 'profile', label: 'Admin Profile', icon: User },
     { id: 'logout', label: 'Logout / Switch Role', icon: LogOut },
   ];
@@ -192,7 +203,11 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ onOpenQuizMo
             exit={{ x: '-100%' }}
             transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
             className={`relative w-[82vw] max-w-xs sm:w-80 h-full shadow-2xl flex flex-col z-10 border-r transition-colors ${
-              isDark
+              role === 'student'
+                ? isDark
+                  ? 'bg-slate-900/80 backdrop-blur-2xl border-slate-800/70 text-slate-100'
+                  : 'bg-white/80 backdrop-blur-2xl border-slate-200/70 text-slate-900'
+                : isDark
                 ? 'bg-slate-900 border-slate-800 text-slate-100'
                 : 'bg-white border-slate-200 text-slate-900'
             }`}
@@ -200,7 +215,11 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ onOpenQuizMo
             {/* Top User Profile Header (Clickable to open profile) */}
             <div
               className={`p-4 sm:p-5 border-b flex items-center justify-between transition-colors ${
-                isDark
+                role === 'student'
+                  ? isDark
+                    ? 'bg-slate-950/60 border-slate-800/60'
+                    : 'bg-indigo-50/50 border-slate-200/60'
+                  : isDark
                   ? 'bg-slate-950/80 border-slate-800'
                   : 'bg-gradient-to-br from-indigo-50/70 via-white to-slate-50 border-slate-200'
               }`}
@@ -257,45 +276,49 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ onOpenQuizMo
                 const isLogout = item.id === 'logout';
 
                 return (
-                  <motion.button
-                    key={item.id}
-                    initial={{ opacity: 0, x: -14 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.025, duration: 0.2 }}
-                    whileHover={{ x: 3 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => handleSelectNav(item.id)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer touch-target ${
-                      isActive
-                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
-                        : isLogout
-                        ? isDark
-                          ? 'text-rose-400 hover:bg-rose-500/10'
-                          : 'text-rose-600 hover:bg-rose-50'
-                        : isDark
-                        ? 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
-                        : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : isLogout ? 'text-rose-500' : isDark ? 'text-indigo-400' : 'text-indigo-600'}`} />
-                      <span className="truncate">{item.label}</span>
-                    </div>
-
-                    {item.badge && (
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ml-2 ${
-                          isActive
-                            ? 'bg-white/20 text-white'
-                            : isDark
-                            ? 'bg-slate-800 text-slate-400'
-                            : 'bg-slate-200/80 text-slate-600'
-                        }`}
-                      >
-                        {item.badge}
-                      </span>
+                  <React.Fragment key={item.id}>
+                    {isLogout && (
+                      <div className="pt-1 border-t border-slate-200/80 dark:border-slate-800/80 my-1" />
                     )}
-                  </motion.button>
+                    <motion.button
+                      initial={{ opacity: 0, x: -14 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.025, duration: 0.2 }}
+                      whileHover={{ x: 3 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => handleSelectNav(item.id)}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer touch-target ${
+                        isActive
+                          ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                          : isLogout
+                          ? isDark
+                            ? 'text-rose-400 hover:bg-rose-500/10'
+                            : 'text-rose-600 hover:bg-rose-50'
+                          : isDark
+                          ? 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                          : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : isLogout ? 'text-rose-500' : isDark ? 'text-indigo-400' : 'text-indigo-600'}`} />
+                        <span className="truncate">{item.label}</span>
+                      </div>
+
+                      {item.badge && (
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ml-2 ${
+                            isActive
+                              ? 'bg-white/20 text-white'
+                              : isDark
+                              ? 'bg-slate-800 text-slate-400'
+                              : 'bg-slate-200/80 text-slate-600'
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </motion.button>
+                  </React.Fragment>
                 );
               })}
 

@@ -742,6 +742,27 @@ app.put('/api/faculty/:id/profile', (req: Request, res: Response) => {
   });
 });
 
+// 11. Role Authorization Check for Open Source Guide (Student & Faculty only, Admin forbidden)
+app.get('/api/guide/access-check', (req: Request, res: Response) => {
+  const role = (req.query.role as string) || (req.headers['x-user-role'] as string);
+  if (role === 'admin') {
+    return res.status(403).json({
+      allowed: false,
+      error: 'Access denied: Open Source Guide is reserved for Student and Faculty roles only.',
+    });
+  }
+  return res.json({ allowed: true });
+});
+
+// Route guard for /open-source-guide: if accessed by admin role query or header, redirect to /
+app.get('/open-source-guide', (req: Request, res: Response, next) => {
+  const role = (req.query.role as string) || (req.headers['x-user-role'] as string);
+  if (role === 'admin') {
+    return res.redirect(302, '/');
+  }
+  next();
+});
+
 // Vite or Static Serving
 async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';

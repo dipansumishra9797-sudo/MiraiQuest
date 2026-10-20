@@ -5,6 +5,7 @@ import { Badge, Quest } from '../../types';
 import { BadgeEmblem, BadgeRarity, MedalShape } from '../common/BadgeEmblem';
 import { BadgeDetailModal } from './BadgeDetailModal';
 import { fireConfetti } from '../../utils/confetti';
+import { ClosedChestIcon, OpenChestIcon } from '../common/ChestIcons';
 import {
   Sparkles,
   Award,
@@ -23,7 +24,7 @@ import {
 } from 'lucide-react';
 
 export const BadgesQuestsView: React.FC = () => {
-  const { activeStudent, badges, quests, triggerConfetti, triggerXpEvent, isDark } = useApp();
+  const { activeStudent, badges, quests, triggerConfetti, triggerXpEvent, isDark, triggerChestReward, claimedRewardIds } = useApp();
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [selectedBadge, setSelectedBadge] = useState<Badge | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
@@ -57,38 +58,27 @@ export const BadgesQuestsView: React.FC = () => {
   };
 
   const handleClaimQuest = (quest: Quest) => {
-    if (claimedQuestIds.has(quest.id) || quest.currentProgress < quest.targetCount) return;
+    if (
+      claimedRewardIds.includes(quest.id) ||
+      claimedQuestIds.has(quest.id) ||
+      quest.currentProgress < quest.targetCount
+    ) {
+      return;
+    }
 
-    setClaimingQuestId(quest.id);
+    setClaimedQuestIds((prev) => new Set(prev).add(quest.id));
 
-    setTimeout(() => {
-      setClaimedQuestIds((prev) => new Set(prev).add(quest.id));
-      setClaimingQuestId(null);
-      fireConfetti();
-
-      const xpReward = quest.rewardXp || 50;
-      const coinReward = quest.rewardCoins || 20;
-
-      // Award XP & Coins through app store
-      triggerXpEvent({
-        eventId: `ev_quest_${quest.id}_${Date.now()}`,
-        studentId: activeStudent.id,
-        actionKey: 'solve_coding',
-        timestamp: new Date().toISOString(),
-        metadata: {
-          questTitle: quest.title,
-          verificationSource: 'MiraiQuest Quest Milestone Claim',
-        },
-      });
-
-      setQuestRewardToast({
-        title: quest.title,
-        xp: xpReward,
-        coins: coinReward,
-      });
-
-      setTimeout(() => setQuestRewardToast(null), 4500);
-    }, 1200);
+    // Trigger full-screen 3.5s to 4.5s chest reward animation with sound & counter pulse
+    triggerChestReward({
+      id: quest.id,
+      title: quest.title,
+      subtitle: `${quest.subject} Syllabus Quest Completed!`,
+      rarity: (quest.rewardXp || 0) >= 60 ? 'gold' : 'silver',
+      items: [
+        { type: 'xp', amount: quest.rewardXp || 50, label: 'Quest XP' },
+        { type: 'coins', amount: quest.rewardCoins || 20, label: 'Quest Coins' },
+      ],
+    });
   };
 
   const getQuestIcon = (iconName?: string) => {
@@ -173,10 +163,9 @@ export const BadgesQuestsView: React.FC = () => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
           {quests.map((q) => {
-            const isClaimed = claimedQuestIds.has(q.id);
+            const isClaimed = claimedRewardIds.includes(q.id) || claimedQuestIds.has(q.id);
             const isCompleted = q.currentProgress >= q.targetCount;
             const progressPercent = Math.min(100, Math.round((q.currentProgress / q.targetCount) * 100));
-            const isClaiming = claimingQuestId === q.id;
 
             return (
               <div
@@ -198,12 +187,14 @@ export const BadgesQuestsView: React.FC = () => {
                     </span>
 
                     {isClaimed ? (
-                      <span className="text-emerald-500 font-bold flex items-center gap-1 text-[11px]">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Claimed
+                      <span className="text-emerald-500 font-bold flex items-center gap-1.5 text-[11px]">
+                        <OpenChestIcon size={18} rarity="gold" />
+                        <span>Claimed</span>
                       </span>
                     ) : isCompleted ? (
-                      <span className="text-emerald-400 font-extrabold flex items-center gap-1 text-[11px] animate-pulse">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Ready to Claim!
+                      <span className="text-amber-400 font-extrabold flex items-center gap-1.5 text-[11px] animate-pulse">
+                        <ClosedChestIcon size={18} rarity="gold" glow={true} />
+                        <span>Ready to Claim!</span>
                       </span>
                     ) : (
                       <span className={`tabular-nums text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -257,16 +248,17 @@ export const BadgesQuestsView: React.FC = () => {
                   {/* Claim Button with Animated Chest */}
                   {isCompleted && !isClaimed ? (
                     <button
+                      type="button"
                       onClick={() => handleClaimQuest(q)}
-                      disabled={isClaiming}
-                      className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold text-xs tracking-wide shadow-md shadow-amber-500/30 hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-75"
+                      className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white font-bold text-xs tracking-wide shadow-md shadow-amber-500/30 hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
                     >
-                      <Gift className={`w-3.5 h-3.5 ${isClaiming ? 'animate-spin' : 'animate-bounce'}`} />
-                      <span>{isClaiming ? 'Opening Chest...' : 'Claim Reward'}</span>
+                      <ClosedChestIcon size={16} rarity="gold" glow={true} />
+                      <span>Claim Reward</span>
                     </button>
                   ) : isClaimed ? (
-                    <span className="text-xs text-slate-400 font-semibold flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Done
+                    <span className="text-xs text-emerald-500 font-semibold flex items-center gap-1.5">
+                      <OpenChestIcon size={16} rarity="gold" />
+                      <span>Claimed</span>
                     </span>
                   ) : (
                     <span className="text-[11px] text-slate-400 flex items-center gap-1">

@@ -80,9 +80,11 @@ export const UserProfileModal: React.FC = () => {
     updateNotificationPreferences,
     studentBgAnimationEnabled,
     setStudentBgAnimationEnabled,
+    studentBgStyle,
+    setStudentBgStyle,
+    soundEffectsEnabled,
+    setSoundEffectsEnabled,
   } = useApp();
-
-  if (!isProfileModalOpen) return null;
 
   const isStudent = profileModalRole === 'student';
   const targetStudent: StudentProfile =
@@ -127,6 +129,8 @@ export const UserProfileModal: React.FC = () => {
   const [batchmateSearch, setBatchmateSearch] = useState('');
   const [batchmateSort, setBatchmateSort] = useState<'name' | 'xp' | 'level' | 'streak'>('xp');
   const [selectedBatchmateMiniProfile, setSelectedBatchmateMiniProfile] = useState<StudentProfile | null>(null);
+
+  if (!isProfileModalOpen) return null;
 
   // Filter batchmates: MUST HAVE EXACT SAME campus, year, section
   const batchmatesList = students.filter((s) => {
@@ -1023,7 +1027,7 @@ export const UserProfileModal: React.FC = () => {
 
                 {/* Student Quest Background Animation Toggle */}
                 {isStudent && (
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
                     <div className="flex items-start justify-between gap-4 p-3.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/40 dark:bg-indigo-950/20">
                       <div className="flex items-start gap-3">
                         <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-500 mt-0.5 shrink-0">
@@ -1031,13 +1035,13 @@ export const UserProfileModal: React.FC = () => {
                         </div>
                         <div>
                           <div className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                            <span>Background Animation</span>
+                            <span>Animated Quest Background</span>
                             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                              Quest Feel
+                              Mirai Japanese Theme
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                            Floating gradient orbs, XP sparkles & subtle constellation lines. Automatically pauses during quizzes, tests & coding tests to maintain focus.
+                            Futuristic Japanese visuals: Rising sun, Mount Fuji, cyber skyline, torii gate, floating lanterns, falling sakura & data particles. Pauses during quizzes & coding.
                           </p>
                         </div>
                       </div>
@@ -1055,6 +1059,83 @@ export const UserProfileModal: React.FC = () => {
                         <span
                           className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
                             studentBgAnimationEnabled ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Background Style Options (Orbs, Particles, Aurora, Mirai Scene, Off) */}
+                    <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60">
+                      <div className="text-xs font-bold text-slate-800 dark:text-slate-100 mb-2 flex items-center justify-between">
+                        <span>Background Style</span>
+                        <span className="text-[10px] text-indigo-500 font-semibold uppercase tracking-wider">
+                          Active:{' '}
+                          {studentBgStyle === 'all'
+                            ? 'Orbs + Particles'
+                            : studentBgStyle === 'orbs'
+                            ? 'Orbs'
+                            : studentBgStyle === 'particles'
+                            ? 'Particles'
+                            : studentBgStyle === 'aurora'
+                            ? 'Aurora'
+                            : studentBgStyle === 'mirai'
+                            ? 'Mirai Scene'
+                            : 'Off'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {[
+                          { id: 'all', label: 'Orbs + Particles (Default)' },
+                          { id: 'orbs', label: 'Orbs' },
+                          { id: 'particles', label: 'Particles' },
+                          { id: 'aurora', label: 'Aurora' },
+                          { id: 'mirai', label: 'Mirai Scene' },
+                          { id: 'off', label: 'Off' },
+                        ].map((styleOption) => {
+                          const isSelected = studentBgStyle === styleOption.id;
+                          return (
+                            <button
+                              key={styleOption.id}
+                              type="button"
+                              onClick={() => setStudentBgStyle(styleOption.id as any)}
+                              className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all text-center cursor-pointer border ${
+                                isSelected
+                                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                  : 'bg-black/5 dark:bg-white/5 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-black/10 dark:hover:bg-white/10'
+                              }`}
+                            >
+                              {styleOption.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Sound Effects Toggle (Chest creak, chimes, coins) */}
+                    <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                          <Volume2 className="w-3.5 h-3.5 text-amber-500" />
+                          <span>Reward & Quest Audio Effects</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                          Play soft wooden chest creak, angelic opening chime, and metallic coin sounds on claim.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setSoundEffectsEnabled(!soundEffectsEnabled)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                          soundEffectsEnabled ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
+                        }`}
+                        role="switch"
+                        aria-checked={soundEffectsEnabled}
+                        title="Toggle reward claim sound effects on/off"
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                            soundEffectsEnabled ? 'translate-x-5' : 'translate-x-0'
                           }`}
                         />
                       </button>
@@ -1167,9 +1248,9 @@ export const UserProfileModal: React.FC = () => {
 
                           {/* Stats */}
                           <div className="flex items-center gap-2 text-[10px] mt-1 text-slate-500 dark:text-slate-400 font-medium">
-                            <span className="flex items-center gap-0.5 text-amber-500">
-                              <Flame className="w-3 h-3 fill-current" />
-                              {b.streakDays}d
+                            <span className="flex items-center gap-1 text-amber-500 font-bold">
+                              <StreakFlame streakDays={b.streakDays} size="xs" />
+                              <span>{b.streakDays}d</span>
                             </span>
                             <span>·</span>
                             <span>

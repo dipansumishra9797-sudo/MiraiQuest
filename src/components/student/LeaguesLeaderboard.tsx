@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '../../store/appStore';
 import { Campus, LeagueTier, StudentProfile } from '../../types';
-import { Trophy, ArrowUp, ArrowDown, Shield, Download, Play, TrendingUp, Sparkles } from 'lucide-react';
+import { Trophy, ArrowUp, ArrowDown, Shield, Download, Play, TrendingUp, Sparkles, CheckCircle2 } from 'lucide-react';
 import { StreakFlame } from '../common/StreakFlame';
 import { LeagueEmblem } from '../common/GameIcons';
+import { ClosedChestIcon, OpenChestIcon } from '../common/ChestIcons';
 
 export const LeaguesLeaderboard: React.FC = () => {
   const {
@@ -12,6 +13,8 @@ export const LeaguesLeaderboard: React.FC = () => {
     activeStudent,
     simulateWeekEnd,
     isDark,
+    triggerChestReward,
+    claimedRewardIds,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'league' | 'campus' | 'batch' | 'personal_best'>('league');
@@ -79,14 +82,14 @@ export const LeaguesLeaderboard: React.FC = () => {
   };
 
   const cardBg = isDark
-    ? 'bg-slate-900 border-slate-800 text-white'
-    : 'bg-white border-slate-200 text-slate-900 shadow-xs';
+    ? 'bg-slate-900/65 backdrop-blur-md border-slate-800/60 text-white'
+    : 'bg-white/70 backdrop-blur-md border-slate-200/70 text-slate-900 shadow-xs';
   const subCardBg = isDark
-    ? 'bg-slate-950 border-slate-800'
-    : 'bg-slate-50 border-slate-200';
+    ? 'bg-slate-950/50 backdrop-blur-sm border-slate-800/60'
+    : 'bg-slate-50/70 backdrop-blur-sm border-slate-200/70';
   const tableHeaderBg = isDark
-    ? 'bg-slate-950 text-slate-400 border-slate-800'
-    : 'bg-slate-100 text-slate-600 border-slate-200';
+    ? 'bg-slate-950/60 text-slate-400 border-slate-800/60'
+    : 'bg-slate-100/70 text-slate-600 border-slate-200/70';
   const tableBorder = isDark ? 'divide-slate-800/60' : 'divide-slate-200';
 
   return (
@@ -146,6 +149,67 @@ export const LeaguesLeaderboard: React.FC = () => {
           </button>
         </div>
       )}
+
+      {/* League Promotion Reward Banner with Animated Chest */}
+      {(() => {
+        const promotionClaimId = `league_prom_${activeStudent.league}_week`;
+        const isClaimed = claimedRewardIds.includes(promotionClaimId);
+
+        return (
+          <div
+            className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-3 ${
+              isDark
+                ? 'bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-purple-500/10 border-amber-500/30 text-white'
+                : 'bg-gradient-to-r from-amber-50 via-indigo-50 to-purple-50 border-amber-200 text-slate-900 shadow-xs'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0">
+                <Trophy className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="font-extrabold text-sm flex items-center gap-2">
+                  <span>{activeStudent.league} League Promotion Reward</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40">
+                    Tier Bonus
+                  </span>
+                </div>
+                <div className={`text-xs mt-0.5 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                  Earn +80 XP and +40 Quest Coins for maintaining active standing in the {activeStudent.league} tier!
+                </div>
+              </div>
+            </div>
+
+            {isClaimed ? (
+              <span className="text-xs text-emerald-500 font-bold flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                <OpenChestIcon size={18} rarity="gold" />
+                <span>Claimed (+80 XP)</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  triggerChestReward({
+                    id: promotionClaimId,
+                    title: `${activeStudent.league} League Promotion Reward!`,
+                    subtitle: `Outstanding performance in the ${activeStudent.league} collegiate tier`,
+                    rarity: activeStudent.league === 'Diamond' || activeStudent.league === 'Platinum' ? 'diamond' : 'gold',
+                    items: [
+                      { type: 'xp', amount: 80, label: 'League XP' },
+                      { type: 'coins', amount: 40, label: 'Quest Coins' },
+                      { type: 'badge', label: `${activeStudent.league} League Champion` },
+                    ],
+                  });
+                }}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:brightness-110 active:scale-95 text-white font-extrabold text-xs shadow-md shadow-amber-500/30 flex items-center gap-2 cursor-pointer shrink-0"
+              >
+                <ClosedChestIcon size={18} rarity={activeStudent.league === 'Diamond' ? 'diamond' : 'gold'} glow={true} />
+                <span>Claim Promotion Chest (+80 XP)</span>
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Tabs */}
       <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>

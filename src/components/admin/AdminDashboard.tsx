@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useApp } from '../../store/appStore';
 import { XpRule, Campus, LeagueTier } from '../../types';
 import { GlobalFilterBar } from '../GlobalFilterBar';
+import { StreakFlame } from '../common/StreakFlame';
 import {
   ShieldCheck,
   Sliders,
@@ -28,10 +29,8 @@ import {
   ArrowRight,
   Sparkles,
   ShieldAlert,
-  Activity,
 } from 'lucide-react';
 import { IllustratedEmptyState } from '../common/GameIcons';
-import { DraggableGridDemo } from '@/components/ui/demo';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -63,8 +62,7 @@ export const AdminDashboard: React.FC = () => {
     | 'leagues'
     | 'battles'
     | 'rewards'
-    | 'users'
-    | 'observability';
+    | 'users';
 
   const [activeTab, setActiveTab] = useState<AdminTab>('rules');
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
@@ -72,8 +70,14 @@ export const AdminDashboard: React.FC = () => {
   const [editCap, setEditCap] = useState<number>(0);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Sync with navSection from Drawer
+  // Sync with navSection from Drawer & Redirect legacy observability route to rules
   useEffect(() => {
+    if (navSection === 'admin:observability') {
+      setNavSection('admin:rules');
+      setActiveTab('rules');
+      return;
+    }
+
     if (navSection.startsWith('admin:')) {
       const section = navSection.replace('admin:', '') as AdminTab;
       if (
@@ -86,13 +90,15 @@ export const AdminDashboard: React.FC = () => {
           'battles',
           'rewards',
           'users',
-          'observability',
         ].includes(section)
       ) {
         setActiveTab(section);
+      } else {
+        setActiveTab('rules');
+        setNavSection('admin:rules');
       }
     }
-  }, [navSection]);
+  }, [navSection, setNavSection]);
 
   const handleTabClick = (tabId: AdminTab) => {
     setActiveTab(tabId);
@@ -208,7 +214,6 @@ export const AdminDashboard: React.FC = () => {
           { id: 'battles', label: `Battles Control (${filteredBattles.length})`, icon: Swords },
           { id: 'rewards', label: `Rewards & Redemptions (${filteredRedemptions.length})`, icon: ShoppingBag },
           { id: 'users', label: `Users Directory (${filteredStudents.length})`, icon: Users },
-          { id: 'observability', label: 'AI Observability & Tiler', icon: Activity },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -855,9 +860,9 @@ export const AdminDashboard: React.FC = () => {
                           <span className="block text-[10px] text-slate-400">{s.year} · Sec {s.section}</span>
                         </td>
                         <td className="py-3 px-4 text-center tabular-nums">
-                          <span className="inline-flex items-center gap-1 text-amber-500 font-bold">
-                            <Flame className="w-3.5 h-3.5 fill-current" />
-                            {s.streakDays}d
+                          <span className="inline-flex items-center justify-center gap-1 text-amber-500 font-bold">
+                            <StreakFlame streakDays={s.streakDays} size="xs" />
+                            <span>{s.streakDays}d</span>
                           </span>
                         </td>
                         <td className="py-3 px-4 text-center font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
@@ -1113,8 +1118,8 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                     <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-700/20">
                       <span className="inline-flex items-center gap-1 text-amber-500 font-bold text-xs">
-                        <Flame className="w-3.5 h-3.5 fill-current" />
-                        {s.streakDays}d
+                        <StreakFlame streakDays={s.streakDays} size="xs" />
+                        <span>{s.streakDays}d</span>
                       </span>
                       <span className="tabular-nums font-bold text-emerald-600 dark:text-emerald-400 text-xs">
                         {s.totalXp.toLocaleString()} XP
@@ -1172,9 +1177,9 @@ export const AdminDashboard: React.FC = () => {
                           Lvl {s.level}
                         </td>
                         <td className="py-3 px-4 text-center tabular-nums">
-                          <span className="inline-flex items-center gap-1 text-amber-500 font-bold">
-                            <Flame className="w-3.5 h-3.5 fill-current" />
-                            {s.streakDays}d
+                          <span className="inline-flex items-center justify-center gap-1 text-amber-500 font-bold">
+                            <StreakFlame streakDays={s.streakDays} size="xs" />
+                            <span>{s.streakDays}d</span>
                           </span>
                         </td>
                         <td className="py-3 px-4 text-center tabular-nums font-bold text-emerald-600 dark:text-emerald-400">
@@ -1200,25 +1205,7 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* 9. AI Agent Observability & Draggable Widget Grid */}
-      {activeTab === 'observability' && (
-        <div className={`p-5 rounded-2xl border space-y-4 transition-colors ${cardBg}`}>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 text-indigo-500">
-                <Activity className="w-4 h-4" />
-                <span>Real-Time AI Observability & Dynamic Widget Grid</span>
-              </h4>
-              <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                Gap-free rectangular tiler with spring physics. Drag widgets or hold Alt + Arrow keys to customize your operations layout.
-              </p>
-            </div>
-          </div>
-          <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800">
-            <DraggableGridDemo embedded />
-          </div>
-        </div>
-      )}
+      {/* End Admin Views */}
     </div>
   );
 };

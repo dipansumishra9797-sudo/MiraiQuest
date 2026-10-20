@@ -11,7 +11,7 @@ import {
   X,
   AlertCircle,
   Loader2,
-  Flame,
+  Zap,
   ArrowRight,
   RefreshCw,
   ChevronRight,
@@ -582,8 +582,8 @@ const ProblemRow: React.FC<{
                   #{prob.platformProblemNumber}
                 </span>
               )}
-              <span className="text-[11px] text-indigo-400 font-semibold flex items-center gap-1">
-                <Flame className="w-3 h-3 text-orange-400" />
+              <span className="text-[11px] text-amber-500 font-bold flex items-center gap-1">
+                <Zap className="w-3 h-3 fill-current" />
                 +{prob.xpReward} XP
               </span>
             </div>

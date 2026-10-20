@@ -37,7 +37,6 @@ import {
   AlertCircle,
   RefreshCw,
   ExternalLink,
-  Flame,
   BookOpen,
 } from 'lucide-react';
 import { IllustratedEmptyState } from '../common/GameIcons';

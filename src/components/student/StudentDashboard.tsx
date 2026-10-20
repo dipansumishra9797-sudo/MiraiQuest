@@ -11,8 +11,10 @@ import { PeerHelpBoard } from './PeerHelpBoard';
 import { RewardsStoreView } from './RewardsStoreView';
 import { BossBattleModal } from './BossBattleModal';
 import { CountUp } from '../common/CountUp';
+import { SlotCounter } from '../common/SlotCounter';
 import { StreakFlame, getStreakTier } from '../common/StreakFlame';
 import { StreakMilestoneModal } from './StreakMilestoneModal';
+import { StreakDetailModal } from './StreakDetailModal';
 import { GameStatBadge, LeagueEmblem } from '../common/GameIcons';
 import {
   Flame,
@@ -78,6 +80,10 @@ export const StudentDashboard: React.FC = () => {
 
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
   const [freezeEffectActive, setFreezeEffectActive] = useState(false);
+  const [showStreakDetailModal, setShowStreakDetailModal] = useState(false);
+  const [simulatedAtRisk, setSimulatedAtRisk] = useState(false);
+  const [simulatedReset, setSimulatedReset] = useState(false);
+  const [isDayIgniting, setIsDayIgniting] = useState(false);
 
   // Framer Motion streak animation triggers
   const [streakAnimKey, setStreakAnimKey] = useState<number>(0);
@@ -88,7 +94,10 @@ export const StudentDashboard: React.FC = () => {
   // Check if student completed today's action
   const todayDateStr = new Date().toISOString().split('T')[0];
   const isTodayActivityDone = activeStudent.streakCalendar.includes(todayDateStr);
-  const isStreakAtRisk = !isTodayActivityDone && activeStudent.streakDays > 0;
+  const isStreakAtRisk =
+    (simulatedAtRisk || (!isTodayActivityDone && activeStudent.streakDays > 0)) &&
+    !freezeEffectActive &&
+    !simulatedReset;
 
   useEffect(() => {
     if (activeStudent.streakDays !== prevStreakRef.current) {
@@ -96,13 +105,17 @@ export const StudentDashboard: React.FC = () => {
       prevStreakRef.current = activeStudent.streakDays;
       setStreakAnimKey((k) => k + 1);
       setShowStreakBonusPop(true);
+      setIsDayIgniting(true);
 
       // Check if student hit milestone 7, 14, 30, or 100 days
       if ([7, 14, 30, 100].includes(activeStudent.streakDays) && activeStudent.streakDays > oldVal) {
         setMilestoneCelebrationDays(activeStudent.streakDays);
       }
 
-      const timer = setTimeout(() => setShowStreakBonusPop(false), 2400);
+      const timer = setTimeout(() => {
+        setShowStreakBonusPop(false);
+        setIsDayIgniting(false);
+      }, 2400);
       return () => clearTimeout(timer);
     }
   }, [activeStudent.streakDays]);
@@ -110,7 +123,32 @@ export const StudentDashboard: React.FC = () => {
   const triggerStreakAnimation = () => {
     setStreakAnimKey((k) => k + 1);
     setShowStreakBonusPop(true);
-    setTimeout(() => setShowStreakBonusPop(false), 2400);
+    setIsDayIgniting(true);
+    setTimeout(() => {
+      setShowStreakBonusPop(false);
+      setIsDayIgniting(false);
+    }, 2400);
+  };
+
+  const handleSimulateStreakIncrement = () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const newStreak = activeStudent.streakDays + 1;
+    const newCalendar = activeStudent.streakCalendar.includes(todayStr)
+      ? activeStudent.streakCalendar
+      : [...activeStudent.streakCalendar, todayStr];
+
+    updateStudentProfile(activeStudent.id, {
+      streakDays: newStreak,
+      streakCalendar: newCalendar,
+    });
+    setSimulatedReset(false);
+    triggerStreakAnimation();
+    setFeedbackToast(`Activity completed! Streak rolled up to ${newStreak} days.`);
+    setTimeout(() => setFeedbackToast(null), 4000);
+  };
+
+  const handleTriggerMilestoneOverlay = (days: number) => {
+    setMilestoneCelebrationDays(days);
   };
 
   const { level, currentLevelXp, nextLevelXp, progressPercent } = calculateLevelFromXp(
@@ -272,39 +310,37 @@ export const StudentDashboard: React.FC = () => {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 w-full lg:w-auto">
             {/* 1. Streak Tile */}
             <motion.div
-              onClick={() => {
-                if (activeStudent.streakDays >= 7) {
-                  setMilestoneCelebrationDays(activeStudent.streakDays);
-                }
-              }}
+              onClick={() => setShowStreakDetailModal(true)}
               animate={
                 streakAnimKey > 0
                   ? {
-                      scale: [1, 1.05, 1],
+                      scale: [1, 1.06, 1],
                       boxShadow: [
                         '0 0 0px rgba(249, 115, 22, 0)',
-                        '0 0 24px rgba(249, 115, 22, 0.45)',
+                        '0 0 28px rgba(249, 115, 22, 0.55)',
                         '0 0 0px rgba(249, 115, 22, 0)',
                       ],
                     }
                   : { scale: 1 }
               }
               transition={{ type: 'tween', duration: 0.5, ease: 'easeInOut' }}
-              className={`relative p-3 sm:p-3.5 rounded-2xl border flex flex-col justify-between overflow-hidden transition-colors cursor-pointer select-none ${
-                isDark ? 'bg-slate-950 border-slate-800 hover:border-orange-500/40' : 'bg-white border-slate-200 shadow-2xs hover:border-orange-300'
+              className={`relative p-3 sm:p-3.5 rounded-2xl border flex flex-col justify-between overflow-hidden transition-all cursor-pointer select-none group ${
+                isDark
+                  ? 'bg-slate-950 border-slate-800 hover:border-orange-500/50 hover:bg-slate-900/60'
+                  : 'bg-white border-slate-200 shadow-2xs hover:border-orange-300 hover:shadow-md'
               }`}
-              title="Click to view streak tier and milestone progress"
+              title="Click to view streak tiers, milestones roadmap, and test animations"
             >
               <AnimatePresence>
                 {showStreakBonusPop && (
                   <motion.div
-                    initial={{ opacity: 0, y: 6, scale: 0.8 }}
+                    initial={{ opacity: 0, y: 8, scale: 0.7 }}
                     animate={{ opacity: 1, y: -2, scale: 1 }}
-                    exit={{ opacity: 0, y: -10, scale: 0.8 }}
-                    transition={{ type: 'tween', duration: 0.35, ease: 'easeOut' }}
-                    className="absolute top-1 right-2 px-1.5 py-0.5 rounded-full bg-orange-500/25 border border-orange-500/60 text-orange-400 text-[9px] font-black z-10 flex items-center gap-1 shadow-sm"
+                    exit={{ opacity: 0, y: -12, scale: 0.7 }}
+                    transition={{ type: 'spring', damping: 15 }}
+                    className="absolute top-1 right-2 px-2 py-0.5 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 text-white text-[9px] font-black z-10 flex items-center gap-1 shadow-md shadow-orange-500/30"
                   >
-                    <Sparkles className="w-2.5 h-2.5 text-orange-300" />
+                    <Sparkles className="w-2.5 h-2.5 text-yellow-200" />
                     <span>Streak Up!</span>
                   </motion.div>
                 )}
@@ -313,14 +349,17 @@ export const StudentDashboard: React.FC = () => {
               <div className="flex items-center justify-between text-xs mb-1.5">
                 <div className="flex items-center gap-2">
                   <StreakFlame
-                    streakDays={activeStudent.streakDays}
-                    size="xs"
+                    streakDays={simulatedReset ? 0 : activeStudent.streakDays}
+                    size="sm"
                     isAtRisk={isStreakAtRisk}
                     isFrozen={freezeEffectActive}
                     isBursting={showStreakBonusPop}
+                    isExtinguished={simulatedReset}
                   />
                   <span className="font-extrabold text-orange-500 text-xs">
-                    {getStreakTier(activeStudent.streakDays).name}
+                    {simulatedReset
+                      ? 'Spark Ready'
+                      : getStreakTier(activeStudent.streakDays).name}
                   </span>
                 </div>
 
@@ -331,17 +370,21 @@ export const StudentDashboard: React.FC = () => {
               </div>
 
               <div className="flex items-baseline justify-between overflow-hidden mt-1">
-                <div className="text-xl sm:text-2xl font-black tabular-nums flex items-baseline gap-1">
+                <div className="text-xl sm:text-2xl font-black tabular-nums flex items-baseline gap-1.5">
                   <span className="text-orange-500">
-                    <CountUp value={activeStudent.streakDays} />
+                    <SlotCounter value={simulatedReset ? 0 : activeStudent.streakDays} />
                   </span>
                   <span className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Days</span>
                 </div>
-                {isStreakAtRisk && (
-                  <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider animate-pulse">
-                    At Risk
+                {isStreakAtRisk ? (
+                  <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider animate-pulse flex items-center gap-0.5">
+                    <span>At Risk</span>
                   </span>
-                )}
+                ) : simulatedReset ? (
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                    Fresh Start
+                  </span>
+                ) : null}
               </div>
             </motion.div>
 
@@ -508,17 +551,20 @@ export const StudentDashboard: React.FC = () => {
                 }`}
               >
                 {calendarDays.map((day, idx) => {
-                  const isCellIgniting = day.isToday && showStreakBonusPop && day.isCompleted;
+                  const isCellIgniting = (day.isToday && (isDayIgniting || showStreakBonusPop)) || (day.isToday && isTodayActivityDone && isDayIgniting);
+                  const isCellFreezing = day.isToday && freezeEffectActive;
 
                   return (
                     <motion.div
                       key={day.dateStr}
-                      initial={{ opacity: 0, y: 8, scale: 0.85 }}
+                      initial={{ opacity: 0, y: 12, scale: 0.88 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
-                      transition={{ delay: idx * 0.035, duration: 0.25, ease: 'easeOut' }}
+                      transition={{ delay: idx * 0.035, duration: 0.35, ease: 'easeOut' }}
                       className={`p-2 rounded-xl text-center border transition-all relative overflow-hidden select-none ${
                         isCellIgniting
-                          ? 'animate-fire-fill bg-gradient-to-t from-orange-500 via-amber-500 to-orange-400 text-white font-black shadow-md border-orange-400'
+                          ? 'animate-fire-fill bg-gradient-to-t from-orange-500 via-amber-500 to-orange-400 text-white font-black shadow-lg border-orange-400'
+                          : isCellFreezing
+                          ? 'bg-blue-500/15 border-blue-400 text-blue-300 font-bold ring-2 ring-cyan-400/80 shadow-md'
                           : day.isCompleted
                           ? isDark
                             ? 'bg-orange-500/10 border-orange-500/40 text-orange-300 font-bold'
@@ -526,19 +572,41 @@ export const StudentDashboard: React.FC = () => {
                           : isDark
                           ? 'bg-slate-950 border-slate-800/80 text-slate-500'
                           : 'bg-slate-100/80 border-slate-200 text-slate-500'
-                      } ${day.isToday ? 'ring-2 ring-indigo-500/80 shadow-sm' : ''}`}
+                      } ${day.isToday ? 'animate-today-pulse ring-2 ring-indigo-500/90 shadow-sm' : ''}`}
                     >
+                      {/* Frost spread overlay when using freeze */}
+                      {isCellFreezing && (
+                        <div className="absolute inset-0 bg-gradient-to-tr from-cyan-400/35 via-sky-300/40 to-white/40 animate-frost-spread pointer-events-none" />
+                      )}
+
+                      {/* Fire particles on ignition */}
+                      {isCellIgniting && (
+                        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                          <div className="absolute bottom-0 left-1/3 w-1.5 h-1.5 bg-yellow-200 rounded-full animate-ping" />
+                          <div className="absolute bottom-1 right-1/4 w-1 h-1 bg-white rounded-full animate-pulse" />
+                        </div>
+                      )}
+
                       <div className="text-[10px] opacity-75">{day.dayName}</div>
                       <div className="text-xs font-black tabular-nums mt-0.5">{day.dayNum}</div>
-                      <div className="mt-1 flex items-center justify-center min-h-[22px]">
+                      <div className="mt-1 flex flex-col items-center justify-center min-h-[24px]">
                         {day.isCompleted ? (
                           <StreakFlame
-                            streakDays={activeStudent.streakDays}
+                            streakDays={activeStudent.streakDays || 1}
                             size="xs"
                             isFrozen={day.isToday && freezeEffectActive}
+                            isBursting={isCellIgniting}
                           />
-                        ) : day.isToday && freezeEffectActive ? (
-                          <Snowflake className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                        ) : isCellFreezing ? (
+                          <motion.div
+                            initial={{ scale: 0, rotate: -180 }}
+                            animate={{ scale: 1, rotate: 360 }}
+                            transition={{ type: 'spring', damping: 15 }}
+                            className="flex flex-col items-center"
+                          >
+                            <Snowflake className="w-3.5 h-3.5 text-cyan-300 animate-spin" />
+                            <span className="text-[8px] font-black text-cyan-300 mt-0.5">Protected</span>
+                          </motion.div>
                         ) : (
                           <span
                             className={`w-1.5 h-1.5 rounded-full inline-block ${
@@ -890,6 +958,23 @@ export const StudentDashboard: React.FC = () => {
           isDark={isDark}
         />
       )}
+
+      {/* Interactive Streak Details, Tiers, & Animation Simulator Modal */}
+      <StreakDetailModal
+        isOpen={showStreakDetailModal}
+        onClose={() => setShowStreakDetailModal(false)}
+        streakDays={simulatedReset ? 0 : activeStudent.streakDays}
+        streakFreezesRemaining={activeStudent.streakFreezesRemaining}
+        isTodayDone={isTodayActivityDone}
+        isDark={isDark}
+        onSimulateCompleteToday={handleSimulateStreakIncrement}
+        onUseFreeze={handleUseFreeze}
+        onTriggerMilestone={handleTriggerMilestoneOverlay}
+        onToggleAtRiskDemo={() => setSimulatedAtRisk((prev) => !prev)}
+        onToggleResetDemo={() => setSimulatedReset((prev) => !prev)}
+        isSimulatedAtRisk={simulatedAtRisk}
+        isSimulatedReset={simulatedReset}
+      />
     </div>
   );
 };

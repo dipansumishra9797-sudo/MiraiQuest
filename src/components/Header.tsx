@@ -13,6 +13,8 @@ import {
   Moon,
   User,
   Bell,
+  Zap,
+  Coins,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -36,11 +38,21 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, onOpenQ
     setNavSection,
     openProfileModal,
     notifications,
+    headerPulseTrigger,
   } = useApp();
 
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isRinging, setIsRinging] = useState(false);
+  const [isCounterPulsing, setIsCounterPulsing] = useState(false);
+
+  useEffect(() => {
+    if (headerPulseTrigger > 0) {
+      setIsCounterPulsing(true);
+      const timer = setTimeout(() => setIsCounterPulsing(false), 1400);
+      return () => clearTimeout(timer);
+    }
+  }, [headerPulseTrigger]);
 
   const unreadNotifCount = notifications.filter((n) => !n.read).length;
   const prevUnreadRef = useRef(unreadNotifCount);
@@ -61,14 +73,14 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, onOpenQ
   return (
     <>
       <header
-        className={`sticky top-0 z-40 backdrop-blur-md border-b transition-colors ${
+        className={`sticky top-0 z-40 transition-colors ${
           role === 'student'
             ? isDark
-              ? 'bg-slate-950/80 border-slate-800/80 text-slate-100'
-              : 'bg-white/80 border-slate-200/80 text-slate-900 shadow-xs'
+              ? 'bg-slate-950/65 backdrop-blur-xl border-b border-slate-800/60 text-slate-100 shadow-sm'
+              : 'bg-white/70 backdrop-blur-xl border-b border-slate-200/60 text-slate-900 shadow-xs'
             : isDark
-            ? 'bg-slate-950/90 border-slate-800 text-slate-100'
-            : 'bg-white/95 border-slate-200 text-slate-900 shadow-xs'
+            ? 'bg-slate-950/90 backdrop-blur-md border-b border-slate-800 text-slate-100'
+            : 'bg-white/95 backdrop-blur-md border-b border-slate-200 text-slate-900 shadow-xs'
         }`}
       >
         <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 h-16">
@@ -103,7 +115,40 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, onOpenQ
           </div>
 
           {/* Zone 2: Actions, Notifications (Student Only), Theme Toggle, User Name (Profile), Role Switcher */}
-          <div className="relative flex items-center gap-1.5 sm:gap-3 shrink-0">
+          <div className="relative flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {/* Student Live XP & Coin Counters with pulse on chest reward fly-in */}
+            {role === 'student' && (
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div
+                  className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-xl border text-[11px] sm:text-xs font-bold transition-all ${
+                    isCounterPulsing
+                      ? 'scale-110 ring-2 ring-emerald-400 bg-emerald-500/20 text-emerald-400 shadow-lg'
+                      : isDark
+                      ? 'bg-slate-900/80 border-slate-800 text-emerald-400'
+                      : 'bg-white/80 border-slate-200 text-emerald-600 shadow-2xs'
+                  }`}
+                  title="Total XP Earned"
+                >
+                  <Zap className={`w-3.5 h-3.5 fill-current ${isCounterPulsing ? 'animate-bounce' : ''}`} />
+                  <span className="tabular-nums">{activeStudent.totalXp.toLocaleString()} XP</span>
+                </div>
+
+                <div
+                  className={`hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-xl border text-xs font-bold transition-all ${
+                    isCounterPulsing
+                      ? 'scale-110 ring-2 ring-amber-400 bg-amber-500/20 text-amber-300 shadow-lg'
+                      : isDark
+                      ? 'bg-slate-900/80 border-slate-800 text-amber-300'
+                      : 'bg-white/80 border-slate-200 text-amber-600 shadow-2xs'
+                  }`}
+                  title="Quest Coins Balance"
+                >
+                  <Coins className={`w-3.5 h-3.5 fill-current ${isCounterPulsing ? 'animate-bounce' : ''}`} />
+                  <span className="tabular-nums">{activeStudent.coinsBalance ?? 120}</span>
+                </div>
+              </div>
+            )}
+
             {/* Notification Bell Button (STUDENTS ONLY) */}
             {role === 'student' && (
               <button

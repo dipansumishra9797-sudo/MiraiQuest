@@ -5,6 +5,7 @@ import { FacultyAssignmentManager } from './FacultyAssignmentManager';
 import { CODING_TOPICS } from '../../data/codingPracticeCatalog';
 import { GlobalFilterBar } from '../GlobalFilterBar';
 import { CountUp } from '../common/CountUp';
+import { StreakFlame } from '../common/StreakFlame';
 import {
   Users,
   CheckCircle,
@@ -968,8 +969,8 @@ export const FacultyDashboard: React.FC = () => {
                   <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200 dark:border-slate-800/80 text-center">
                     <div className="p-2 rounded-lg bg-black/5 dark:bg-white/5">
                       <div className="text-[10px] text-slate-400">Streak</div>
-                      <div className="text-xs font-bold text-orange-500 flex items-center justify-center gap-0.5 mt-0.5">
-                        <Flame className="w-3 h-3 fill-current" />
+                      <div className="text-xs font-bold text-orange-500 flex items-center justify-center gap-1 mt-0.5">
+                        <StreakFlame streakDays={s.streakDays} size="xs" />
                         <span>{s.streakDays}d</span>
                       </div>
                     </div>
@@ -1052,9 +1053,9 @@ export const FacultyDashboard: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center font-bold">
-                        <span className="inline-flex items-center gap-1 text-orange-500">
-                          <Flame className="w-3.5 h-3.5 fill-current" />
-                          {s.streakDays}d
+                        <span className="inline-flex items-center justify-center gap-1 text-orange-500">
+                          <StreakFlame streakDays={s.streakDays} size="xs" />
+                          <span>{s.streakDays}d</span>
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center">

@@ -31,7 +31,6 @@ import {
   Filter,
   Check,
   ChevronRight,
-  Flame,
   Award,
   Search,
   Maximize2,
