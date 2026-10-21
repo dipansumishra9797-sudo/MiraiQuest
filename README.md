@@ -13,6 +13,7 @@ MiraiQuest turns everyday learning into a game. Students earn verified XP from a
 - **Weekly leagues** with promotion and relegation, plus batch and campus leaderboards
 - **Team battles** with a live scoreboard
 - **Peer help board** to earn XP for helping classmates
+- **Open Source Guide**
 - **Privacy controls**: granular social link sharing controls with strict cohort isolation (students only see their own campus, year and section)
 
 ### For Teachers
