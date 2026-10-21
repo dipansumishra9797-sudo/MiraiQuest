@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '../../store/appStore';
-import { PAST_BATTLE_MATCHES } from '../../data/mockData';
+import { PAST_BATTLE_MATCHES, INITIAL_BATTLES } from '../../data/mockData';
+import { TeamBattlesSkeleton } from '../common/Skeletons';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 import {
   Swords,
   Users,
@@ -19,7 +21,14 @@ import {
 } from 'lucide-react';
 
 export const TeamBattlesView: React.FC = () => {
-  const { battles, simulateBatchSubmissions, activeStudent, triggerXpEvent, isDark } = useApp();
+  const { battles, simulateBatchSubmissions, activeStudent, triggerXpEvent, isDark, isSessionReady } = useApp();
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 200);
+    return () => clearTimeout(timer);
+  }, []);
+
   const [simulationMetrics, setSimulationMetrics] = useState<{
     totalSubmitted: number;
     processed: number;
@@ -27,7 +36,13 @@ export const TeamBattlesView: React.FC = () => {
     p95LatencyMs: number;
   } | null>(null);
 
-  const activeBattle = battles.find((b) => b.status === 'active') || battles[0];
+  const safeBattles = Array.isArray(battles) && battles.length > 0 ? battles : INITIAL_BATTLES;
+  const activeBattle = safeBattles.find((b) => b && b.status === 'active') || safeBattles[0];
+  const safeStudentId = activeStudent?.id || '';
+
+  if (isLoading || !isSessionReady) {
+    return <TeamBattlesSkeleton isDark={isDark} />;
+  }
 
   const handleSimulateStressTest = () => {
     const res = simulateBatchSubmissions(300);
@@ -37,7 +52,7 @@ export const TeamBattlesView: React.FC = () => {
   const handleQuickSubmitSolution = () => {
     triggerXpEvent({
       eventId: `ev_battle_${Date.now()}`,
-      studentId: activeStudent.id,
+      studentId: safeStudentId,
       actionKey: 'solve_coding',
       timestamp: new Date().toISOString(),
       metadata: {
@@ -48,7 +63,8 @@ export const TeamBattlesView: React.FC = () => {
     });
   };
 
-  const maxScore = Math.max(...activeBattle.teams.map((t) => t.normalizedScore), 1);
+  const safeTeams = Array.isArray(activeBattle?.teams) ? activeBattle.teams : [];
+  const maxScore = Math.max(...safeTeams.map((t) => t.normalizedScore), 1);
 
   const cardBg = isDark
     ? 'bg-slate-900 border-slate-800 text-white'
@@ -157,7 +173,7 @@ export const TeamBattlesView: React.FC = () => {
           </div>
 
           <div className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-            Engine verified: Idempotency keys prevent duplicate credit. Submissions streamed and normalized across 4 campus standings in under 100ms.
+            Engine verified: Idempotency keys prevent duplicate credit. Submissions streamed and normalized across 3 campus standings in under 100ms.
           </div>
         </div>
       )}

@@ -14,6 +14,39 @@ import { BottomNavBar } from './components/BottomNavBar';
 import { StudentAnimatedBackground } from './components/common/StudentAnimatedBackground';
 import { RewardChestModal } from './components/common/RewardChestModal';
 import { OpenSourceGuideView } from './components/OpenSourceGuideView';
+import { LoginModal } from './components/auth/LoginModal';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+
+const getNavSectionFromPathname = (pathname: string, userRole: string): string | null => {
+  if (pathname === '/open-source-guide') {
+    return userRole === 'admin' ? 'admin:rules' : 'open_source_guide';
+  }
+  if (pathname === '/peer-help' || pathname === '/peer-doubts') {
+    return 'dashboard:peer_help';
+  }
+  if (pathname === '/assignments' || pathname === '/coursework') {
+    return userRole === 'faculty' ? 'faculty:assignments' : 'dashboard:assignments';
+  }
+  if (pathname === '/ledger') {
+    return 'dashboard:ledger';
+  }
+  if (pathname === '/badges' || pathname === '/quests') {
+    return 'dashboard:badges';
+  }
+  if (pathname === '/coding') {
+    return userRole === 'faculty' ? 'faculty:coding' : 'dashboard:coding';
+  }
+  if (pathname === '/store') {
+    return 'dashboard:store';
+  }
+  if (pathname === '/leagues') {
+    return userRole === 'admin' ? 'admin:leagues' : 'leagues';
+  }
+  if (pathname === '/battles') {
+    return userRole === 'student' ? 'battles' : userRole === 'faculty' ? 'faculty:battles' : 'admin:battles';
+  }
+  return null;
+};
 
 const AppContent: React.FC = () => {
   const {
@@ -24,6 +57,8 @@ const AppContent: React.FC = () => {
     setIsFocusCriticalActive,
     activeChestReward,
     closeChestReward,
+    isLoginModalOpen,
+    closeLoginModal,
   } = useApp();
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [showDirectQuiz, setShowDirectQuiz] = useState<boolean>(false);
@@ -36,51 +71,64 @@ const AppContent: React.FC = () => {
     }
   }, [showDirectQuiz, setIsFocusCriticalActive]);
 
-  // Sync pathname with /open-source-guide (Student and Faculty only; Admin is redirected to home)
+  // Sync URL pathname with navSection on mount and browser popstate
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (window.location.pathname === '/open-source-guide') {
-        if (role === 'admin') {
-          window.history.replaceState({}, '', '/');
-          setNavSection('admin:rules');
-        } else {
-          setNavSection('open_source_guide');
-        }
+    if (typeof window === 'undefined') return;
+
+    const matched = getNavSectionFromPathname(window.location.pathname, role);
+    if (matched) {
+      if (window.location.pathname === '/open-source-guide' && role === 'admin') {
+        window.history.replaceState({}, '', '/');
+        setNavSection('admin:rules');
+      } else {
+        setNavSection(matched);
       }
-
-      const handlePopState = () => {
-        if (window.location.pathname === '/open-source-guide') {
-          if (role === 'admin') {
-            window.history.replaceState({}, '', '/');
-            setNavSection('admin:rules');
-          } else {
-            setNavSection('open_source_guide');
-          }
-        } else if (navSection === 'open_source_guide') {
-          setNavSection(role === 'faculty' ? 'faculty:analytics' : 'dashboard:overview');
-        }
-      };
-
-      window.addEventListener('popstate', handlePopState);
-      return () => window.removeEventListener('popstate', handlePopState);
     }
-  }, [role, setNavSection, navSection]);
 
-  // Update browser URL when navSection changes to /open-source-guide or away; redirect admin immediately
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (navSection === 'open_source_guide') {
-        if (role === 'admin') {
-          window.history.replaceState({}, '', '/');
-          setNavSection('admin:rules');
-        } else if (window.location.pathname !== '/open-source-guide') {
-          window.history.pushState({}, '', '/open-source-guide');
-        }
-      } else if (window.location.pathname === '/open-source-guide') {
-        window.history.pushState({}, '', '/');
+    const handlePopState = () => {
+      const currentPath = window.location.pathname;
+      const navTarget = getNavSectionFromPathname(currentPath, role);
+      if (navTarget) {
+        setNavSection(navTarget);
+      } else if (navSection === 'open_source_guide') {
+        setNavSection(role === 'faculty' ? 'faculty:analytics' : 'dashboard:overview');
       }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [role, setNavSection]);
+
+  // Update browser URL when navSection changes to /open-source-guide or away
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (navSection === 'open_source_guide') {
+      if (role === 'admin') {
+        window.history.replaceState({}, '', '/');
+        setNavSection('admin:rules');
+      } else if (window.location.pathname !== '/open-source-guide') {
+        window.history.pushState({}, '', '/open-source-guide');
+      }
+    } else if (window.location.pathname === '/open-source-guide') {
+      window.history.pushState({}, '', '/');
     }
   }, [navSection, role, setNavSection]);
+
+  // Keep currentTab in sync with navSection
+  useEffect(() => {
+    if (navSection === 'leagues') {
+      setCurrentTab('leagues');
+    } else if (
+      navSection === 'battles' ||
+      navSection === 'faculty:battles' ||
+      navSection === 'admin:battles'
+    ) {
+      setCurrentTab('battles');
+    } else if (navSection.startsWith('dashboard:') || navSection === 'dashboard') {
+      setCurrentTab('dashboard');
+    }
+  }, [navSection]);
 
   // Redirect legacy admin observability route to admin rules
   useEffect(() => {
@@ -89,7 +137,7 @@ const AppContent: React.FC = () => {
     }
   }, [navSection, setNavSection]);
 
-  // Sync navSection with currentTab
+  // Tab change handler from Header or BottomNavBar
   const handleTabChange = (tab: string) => {
     if (tab === 'quiz') {
       setShowDirectQuiz(true);
@@ -100,11 +148,18 @@ const AppContent: React.FC = () => {
       if (tab === 'leagues') setNavSection('leagues');
       else if (tab === 'battles') setNavSection('battles');
       else setNavSection('dashboard:overview');
+    } else if (role === 'faculty') {
+      if (tab === 'battles') setNavSection('faculty:battles');
+      else setNavSection('faculty:analytics');
+    } else if (role === 'admin') {
+      if (tab === 'leagues') setNavSection('admin:leagues');
+      else if (tab === 'battles') setNavSection('admin:battles');
+      else setNavSection('admin:rules');
     }
   };
 
-  const isStudentLeagues = role === 'student' && (navSection === 'leagues' || currentTab === 'leagues');
-  const isStudentBattles = role === 'student' && (navSection === 'battles' || currentTab === 'battles');
+  const isStudentLeagues = role === 'student' && navSection === 'leagues';
+  const isStudentBattles = role === 'student' && navSection === 'battles';
   const isFacultyBattles = role === 'faculty' && navSection === 'faculty:battles';
   const isAdminLeagues = role === 'admin' && navSection === 'admin:leagues';
   const isAdminBattles = role === 'admin' && navSection === 'admin:battles';
@@ -133,47 +188,54 @@ const AppContent: React.FC = () => {
         onOpenQuizModal={() => setShowDirectQuiz(true)}
       />
 
-      {/* Main Content Area */}
+      {/* Main Content Area with ErrorBoundary */}
       <main className={`flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-8 relative z-10 ${
         role === 'student' ? 'pb-24 sm:pb-8' : 'pb-8'
       }`}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeViewKey}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="w-full"
-          >
-            {/* Open Source Guide View (Accessible only for Student & Faculty; Admin forbidden) */}
-            {navSection === 'open_source_guide' && role !== 'admin' ? (
-              <OpenSourceGuideView />
-            ) : role === 'faculty' ? (
-              isFacultyBattles ? <TeamBattlesView /> : <FacultyDashboard />
-            ) : role === 'admin' ? (
-              isAdminLeagues ? (
-                <LeaguesLeaderboard />
-              ) : isAdminBattles ? (
-                <TeamBattlesView />
-              ) : (
-                <AdminDashboard />
-              )
-            ) : role === 'student' ? (
-              isStudentLeagues ? (
-                <LeaguesLeaderboard />
-              ) : isStudentBattles ? (
-                <TeamBattlesView />
-              ) : (
-                <StudentDashboard />
-              )
-            ) : null}
-          </motion.div>
-        </AnimatePresence>
+        <ErrorBoundary
+          fallbackTitle="View encountered an error"
+          fallbackMessage="MiraiQuest encountered a problem displaying this section. Click below to try again or return to the overview."
+          onReset={() => setNavSection(role === 'faculty' ? 'faculty:analytics' : 'dashboard:overview')}
+        >
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeViewKey}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="w-full"
+            >
+              {/* Open Source Guide View (Accessible only for Student & Faculty; Admin forbidden) */}
+              {navSection === 'open_source_guide' && role !== 'admin' ? (
+                <OpenSourceGuideView />
+              ) : role === 'faculty' ? (
+                isFacultyBattles ? <TeamBattlesView /> : <FacultyDashboard />
+              ) : role === 'admin' ? (
+                isAdminLeagues ? (
+                  <LeaguesLeaderboard />
+                ) : isAdminBattles ? (
+                  <TeamBattlesView />
+                ) : (
+                  <AdminDashboard />
+                )
+              ) : role === 'student' ? (
+                isStudentLeagues ? (
+                  <LeaguesLeaderboard />
+                ) : isStudentBattles ? (
+                  <TeamBattlesView />
+                ) : (
+                  <StudentDashboard />
+                )
+              ) : null}
+            </motion.div>
+          </AnimatePresence>
+        </ErrorBoundary>
       </main>
 
       {/* Global Modals */}
       <UserProfileModal />
+      <LoginModal isOpen={isLoginModalOpen} onClose={closeLoginModal} />
 
       {/* Global Modals for Student */}
       {role === 'student' && (

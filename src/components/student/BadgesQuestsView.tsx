@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../../store/appStore';
 import { Badge, Quest } from '../../types';
@@ -6,6 +6,8 @@ import { BadgeEmblem, BadgeRarity, MedalShape } from '../common/BadgeEmblem';
 import { BadgeDetailModal } from './BadgeDetailModal';
 import { fireConfetti } from '../../utils/confetti';
 import { ClosedChestIcon, OpenChestIcon } from '../common/ChestIcons';
+import { BadgesSkeleton } from '../common/Skeletons';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 import {
   Sparkles,
   Award,
@@ -24,7 +26,25 @@ import {
 } from 'lucide-react';
 
 export const BadgesQuestsView: React.FC = () => {
-  const { activeStudent, badges, quests, triggerConfetti, triggerXpEvent, isDark, triggerChestReward, claimedRewardIds } = useApp();
+  const {
+    activeStudent,
+    badges,
+    quests,
+    triggerConfetti,
+    triggerXpEvent,
+    isDark,
+    triggerChestReward,
+    claimedRewardIds,
+    isSessionReady,
+  } = useApp();
+
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 200);
+    return () => clearTimeout(timer);
+  }, []);
+
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [selectedBadge, setSelectedBadge] = useState<Badge | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
@@ -39,13 +59,23 @@ export const BadgesQuestsView: React.FC = () => {
     coins: number;
   } | null>(null);
 
-  const filteredBadges = badges.filter((b) => {
+  const safeBadges = Array.isArray(badges) ? badges : [];
+  const safeUnlockedBadges = Array.isArray(activeStudent?.unlockedBadgeIds)
+    ? activeStudent.unlockedBadgeIds
+    : [];
+
+  const filteredBadges = safeBadges.filter((b) => {
+    if (!b) return false;
     if (filterCategory === 'all') return true;
     return b.category === filterCategory;
   });
 
+  if (isLoading || !isSessionReady) {
+    return <BadgesSkeleton isDark={isDark} />;
+  }
+
   const handleBadgeClick = (badge: Badge) => {
-    const isUnlocked = activeStudent.unlockedBadgeIds.includes(badge.id);
+    const isUnlocked = safeUnlockedBadges.includes(badge.id);
     if (!isUnlocked) {
       // Show detail modal so student sees progress criteria
       setSelectedBadge(badge);

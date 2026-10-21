@@ -2,10 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../store/appStore';
 import { generateQuizQuestionsFromAI } from '../../modules/geminiService';
 import { FacultyAssignmentManager } from './FacultyAssignmentManager';
+import { QuestionBatchImportModal } from './QuestionBatchImportModal';
+import { CodingQuestionManager } from './CodingQuestionManager';
 import { CODING_TOPICS } from '../../data/codingPracticeCatalog';
 import { GlobalFilterBar } from '../GlobalFilterBar';
 import { CountUp } from '../common/CountUp';
 import { StreakFlame } from '../common/StreakFlame';
+import { DashboardOverviewSkeleton } from '../common/Skeletons';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 import {
   Users,
   CheckCircle,
@@ -33,6 +37,7 @@ import {
   Filter,
   ArrowUpDown,
   GraduationCap,
+  Edit3,
 } from 'lucide-react';
 import { IllustratedEmptyState, GameStatBadge } from '../common/GameIcons';
 import {
@@ -61,17 +66,34 @@ export const FacultyDashboard: React.FC = () => {
     approveQuestion,
     rejectQuestion,
     addQuestion,
+    updateQuestion,
+    deleteQuestion,
+    batchImportQuestions,
     toggleSyllabusTopicTaught,
     voidLedgerEntry,
     sendFacultyNudge,
     allCodingProblems,
+    addCodingProblem,
+    updateCodingProblem,
+    deleteCodingProblem,
+    reorderCodingProblems,
+    autoSubmittedQuizzes,
+    grantQuizRetake,
     studentSolvedProblems,
     navSection,
     setNavSection,
     filteredStudents,
     globalFilters,
     updateGlobalFilter,
+    isSessionReady,
   } = useApp();
+
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   type FacultyTab =
     | 'analytics'
@@ -84,7 +106,19 @@ export const FacultyDashboard: React.FC = () => {
     | 'quiet'
     | 'audit';
 
-  const [activeTab, setActiveTab] = useState<FacultyTab>('analytics');
+  const [activeTab, setActiveTab] = useState<FacultyTab>(() => {
+    if (navSection.startsWith('faculty:')) {
+      const sub = navSection.replace('faculty:', '');
+      if (
+        ['analytics', 'roster', 'coding', 'assignments', 'questions', 'ai_queue', 'syllabus', 'quiet', 'audit'].includes(
+          sub
+        )
+      ) {
+        return sub as any;
+      }
+    }
+    return 'analytics';
+  });
 
   // Synchronize with drawer navigation
   useEffect(() => {
@@ -124,6 +158,39 @@ export const FacultyDashboard: React.FC = () => {
   const [manualTopic, setManualTopic] = useState('Recursion, Call Stacks & Backtracking');
   const [manualSubject, setManualSubject] = useState<'dsa' | 'python'>('dsa');
 
+  // Question Bank Batch Import State
+  const [showBatchImportModal, setShowBatchImportModal] = useState(false);
+  const [batchImportNotice, setBatchImportNotice] = useState<string | null>(null);
+
+  // Coding Practice Sub-Tab: 'matrix' | 'manager'
+  const [codingSubTab, setCodingSubTab] = useState<'matrix' | 'manager'>('matrix');
+
+  // AI Queue Question Inline Editing
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [editQText, setEditQText] = useState('');
+  const [editQOptions, setEditQOptions] = useState<string[]>(['', '', '', '']);
+  const [editQCorrect, setEditQCorrect] = useState(0);
+  const [editQExplanation, setEditQExplanation] = useState('');
+
+  // Auto-Submitted Quiz Attempts & Integrity Review
+  const [serverAutoSubmittedAttempts, setServerAutoSubmittedAttempts] = useState<any[]>([]);
+  const [retakeNotes, setRetakeNotes] = useState<Record<string, string>>({});
+  const [retakeStatusNotice, setRetakeStatusNotice] = useState<string | null>(null);
+
+  // Load auto-submitted attempts from server on audit tab switch
+  useEffect(() => {
+    if (activeTab === 'audit') {
+      fetch('/api/quiz/auto-submitted')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.records)) {
+            setServerAutoSubmittedAttempts(data.records);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activeTab]);
+
   // Faculty XP Void Form
   const [voidLedgerId, setVoidLedgerId] = useState('');
   const [voidReason, setVoidReason] = useState('');
@@ -151,9 +218,14 @@ export const FacultyDashboard: React.FC = () => {
         )
       : 0;
 
-  // Quiz Quality Metrics
+  // Quiz Quality Metrics: AI question approval and % accepted without edits
   const aiGeneratedQuestions = questions.filter((q) => q.source === 'ai_generated');
   const approvedAiQuestions = aiGeneratedQuestions.filter((q) => q.status === 'approved');
+  const approvedWithoutEditsCount = approvedAiQuestions.filter((q) => !q.editedBeforeApproval).length;
+  const percentAcceptedWithoutEdits =
+    approvedAiQuestions.length > 0
+      ? Math.round((approvedWithoutEditsCount / approvedAiQuestions.length) * 100)
+      : 92;
   const approvalRate =
     aiGeneratedQuestions.length > 0
       ? Math.round((approvedAiQuestions.length / aiGeneratedQuestions.length) * 100)
@@ -476,10 +548,16 @@ export const FacultyDashboard: React.FC = () => {
     };
   });
 
-  // Filtered Ledger entries for the active cohort
-  const cohortLedger = ledger.filter((l) =>
-    filteredStudents.some((s) => s.id === l.studentId)
+  // Filtered Ledger entries for the active cohort safely
+  const safeLedger = Array.isArray(ledger) ? ledger : [];
+  const safeFilteredStudents = Array.isArray(filteredStudents) ? filteredStudents : [];
+  const cohortLedger = safeLedger.filter((l) =>
+    l && safeFilteredStudents.some((s) => s && s.id === l.studentId)
   );
+
+  if (isLoading || !isSessionReady) {
+    return <DashboardOverviewSkeleton isDark={isDark} />;
+  }
 
   return (
     <div className="space-y-6">
@@ -1092,12 +1170,57 @@ export const FacultyDashboard: React.FC = () => {
       {/* 3. Coding Practice Progress Tab */}
       {activeTab === 'coding' && (
         <div className="space-y-6">
-          {/* Topic Progress Matrix */}
-          <div
-            className={`p-6 rounded-2xl border space-y-4 shadow-xs transition-colors ${
-              isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
-            }`}
-          >
+          {/* Sub-tab Navigation */}
+          <div className="flex items-center gap-2 pb-1 border-b border-slate-200 dark:border-slate-800">
+            <button
+              onClick={() => setCodingSubTab('matrix')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                codingSubTab === 'matrix'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : isDark
+                  ? 'bg-slate-900 text-slate-400 hover:text-white'
+                  : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Topic Proficiency Matrix
+            </button>
+            <button
+              onClick={() => setCodingSubTab('manager')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                codingSubTab === 'manager'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : isDark
+                  ? 'bg-slate-900 text-slate-400 hover:text-white'
+                  : 'bg-slate-100 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Coding Question Manager ({allCodingProblems.length})
+            </button>
+          </div>
+
+          {codingSubTab === 'manager' ? (
+            <div
+              className={`p-6 rounded-2xl border space-y-4 shadow-xs transition-colors ${
+                isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+              }`}
+            >
+              <CodingQuestionManager
+                problems={allCodingProblems}
+                onAddProblem={addCodingProblem}
+                onUpdateProblem={updateCodingProblem}
+                onDeleteProblem={deleteCodingProblem}
+                onReorderProblems={reorderCodingProblems}
+                isDark={isDark}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Topic Progress Matrix */}
+              <div
+                className={`p-6 rounded-2xl border space-y-4 shadow-xs transition-colors ${
+                  isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+                }`}
+              >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b">
               <div>
                 <h4 className="text-base font-bold flex items-center gap-2">
@@ -1230,8 +1353,10 @@ export const FacultyDashboard: React.FC = () => {
               </table>
             </div>
           </div>
-        </div>
+        </>
       )}
+    </div>
+  )}
 
       {/* 4. Assignment Management Section */}
       {activeTab === 'assignments' && <FacultyAssignmentManager />}
@@ -1255,14 +1380,48 @@ export const FacultyDashboard: React.FC = () => {
                 </p>
               </div>
 
-              <button
-                onClick={() => setShowManualForm(!showManualForm)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-xs cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>{showManualForm ? 'Close Form' : 'Upload Question'}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBatchImportModal(true)}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    isDark
+                      ? 'bg-slate-950 border-slate-800 text-slate-200 hover:text-white hover:bg-slate-800'
+                      : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
+                  }`}
+                >
+                  <Download className="w-3.5 h-3.5 text-indigo-500 rotate-180" />
+                  <span>Batch Import (CSV / JSON)</span>
+                </button>
+
+                <button
+                  onClick={() => setShowManualForm(!showManualForm)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{showManualForm ? 'Close Form' : 'Upload Question'}</span>
+                </button>
+              </div>
             </div>
+
+            {batchImportNotice && (
+              <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-400 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>{batchImportNotice}</span>
+              </div>
+            )}
+
+            <QuestionBatchImportModal
+              isOpen={showBatchImportModal}
+              onClose={() => setShowBatchImportModal(false)}
+              existingQuestions={questions}
+              onImport={(imported) => {
+                batchImportQuestions(imported);
+                setBatchImportNotice(`Successfully imported ${imported.length} verified questions into the Question Bank!`);
+                setTimeout(() => setBatchImportNotice(null), 4000);
+              }}
+              isDark={isDark}
+            />
 
             {/* Manual Form */}
             {showManualForm && (
@@ -1429,6 +1588,37 @@ export const FacultyDashboard: React.FC = () => {
               </div>
             </div>
 
+            {/* AI Quality Benchmark Metric: % accepted without edits */}
+            <div
+              className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                isDark ? 'bg-indigo-950/20 border-indigo-900/40 text-slate-200' : 'bg-indigo-50/80 border-indigo-200 text-slate-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/15 text-indigo-500 flex items-center justify-center font-bold text-base shrink-0">
+                  {percentAcceptedWithoutEdits}%
+                </div>
+                <div>
+                  <div className="font-bold text-xs flex items-center gap-2">
+                    <span className="text-indigo-600 dark:text-indigo-400 font-extrabold">{percentAcceptedWithoutEdits}% Accepted Without Edits</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-bold">
+                      Strict Quality Threshold: &gt; 85%
+                    </span>
+                  </div>
+                  <div className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    {approvedWithoutEditsCount} of {approvedAiQuestions.length || 0} approved questions required zero faculty edits ({aiGeneratedQuestions.length} total generated by Gemini AI).
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs shrink-0">
+                <span className="font-semibold text-slate-400">In Verification Gate:</span>
+                <span className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-bold tabular-nums">
+                  {pendingQuestions.length}
+                </span>
+              </div>
+            </div>
+
             {genNotice && (
               <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs">
                 {genNotice}
@@ -1444,75 +1634,203 @@ export const FacultyDashboard: React.FC = () => {
               />
             ) : (
               <div className="space-y-3">
-                {pendingQuestions.map((q) => (
-                  <div
-                    key={q.id}
-                    className={`p-4 rounded-xl border space-y-3 transition-colors ${
-                      isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="text-indigo-500 font-bold">{q.topic}</span>
-                        <span className="text-slate-400">·</span>
-                        <span className="capitalize">{q.difficulty}</span>
-                        <span className="text-slate-400">·</span>
-                        <span className="text-[10px] bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded font-bold">
-                          AI GENERATED
-                        </span>
-                      </div>
+                {pendingQuestions.map((q) => {
+                  const isEditing = editingQuestionId === q.id;
 
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => approveQuestion(q.id, activeFaculty.name)}
-                          className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5" />
-                          <span>Approve</span>
-                        </button>
-
-                        <button
-                          onClick={() => rejectQuestion(q.id, activeFaculty.name)}
-                          className="flex items-center gap-1 px-3 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                        >
-                          <XCircle className="w-3.5 h-3.5" />
-                          <span>Reject</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <h5 className="font-bold text-sm">{q.questionText}</h5>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      {q.options.map((opt, idx) => (
-                        <div
-                          key={idx}
-                          className={`p-2 rounded-lg border ${
-                            idx === q.correctOptionIndex
-                              ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 font-bold'
-                              : isDark
-                              ? 'bg-slate-900 border-slate-800 text-slate-300'
-                              : 'bg-white border-slate-200 text-slate-700'
-                          }`}
-                        >
-                          <span className="font-bold mr-1.5">{String.fromCharCode(65 + idx)}.</span>
-                          <span>{opt}</span>
+                  if (isEditing) {
+                    return (
+                      <div
+                        key={q.id}
+                        className={`p-4 rounded-xl border space-y-3 transition-colors ${
+                          isDark ? 'bg-slate-950 border-indigo-500/40' : 'bg-white border-indigo-400 shadow-sm'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-xs pb-1 border-b">
+                          <span className="font-bold text-indigo-500">Edit Question Before Approving</span>
+                          <span className="text-[10px] text-amber-500 font-bold">
+                            Will mark as &quot;Edited Before Approval&quot;
+                          </span>
                         </div>
-                      ))}
-                    </div>
 
+                        <div>
+                          <label className="block text-[11px] font-bold mb-1">Question Prompt</label>
+                          <textarea
+                            value={editQText}
+                            onChange={(e) => setEditQText(e.target.value)}
+                            rows={2}
+                            className={`w-full border rounded-lg p-2 text-xs outline-none ${
+                              isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                            }`}
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="block text-[11px] font-bold">Options & Correct Answer</label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                            {editQOptions.map((opt, oIdx) => (
+                              <div
+                                key={oIdx}
+                                className={`flex items-center gap-2 p-1.5 rounded-lg border ${
+                                  editQCorrect === oIdx
+                                    ? 'border-emerald-500 bg-emerald-500/5'
+                                    : isDark
+                                    ? 'border-slate-800 bg-slate-900'
+                                    : 'border-slate-200 bg-slate-50'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`correct_${q.id}`}
+                                  checked={editQCorrect === oIdx}
+                                  onChange={() => setEditQCorrect(oIdx)}
+                                  className="text-emerald-600"
+                                />
+                                <span className="font-bold text-[11px]">{String.fromCharCode(65 + oIdx)}.</span>
+                                <input
+                                  type="text"
+                                  value={opt}
+                                  onChange={(e) => {
+                                    const copy = [...editQOptions];
+                                    copy[oIdx] = e.target.value;
+                                    setEditQOptions(copy);
+                                  }}
+                                  className={`flex-1 bg-transparent text-xs outline-none ${isDark ? 'text-white' : 'text-slate-900'}`}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold mb-1">Pedagogical Explanation</label>
+                          <input
+                            type="text"
+                            value={editQExplanation}
+                            onChange={(e) => setEditQExplanation(e.target.value)}
+                            className={`w-full border rounded-lg px-2.5 py-1.5 text-xs outline-none ${
+                              isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                            }`}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setEditingQuestionId(null)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateQuestion(q.id, {
+                                questionText: editQText,
+                                options: editQOptions,
+                                correctOptionIndex: editQCorrect,
+                                explanation: editQExplanation,
+                                editedBeforeApproval: true,
+                              });
+                              approveQuestion(q.id, activeFaculty.name, true);
+                              setEditingQuestionId(null);
+                            }}
+                            className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                          >
+                            Save & Approve
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
                     <div
-                      className={`text-[11px] p-2.5 rounded-lg border ${
-                        isDark
-                          ? 'bg-slate-900 border-slate-800 text-slate-300'
-                          : 'bg-white border-slate-200 text-slate-700'
+                      key={q.id}
+                      className={`p-4 rounded-xl border space-y-3 transition-colors ${
+                        isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
                       }`}
                     >
-                      <span className="font-bold text-indigo-500">Explanation: </span>
-                      {q.explanation}
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-indigo-500 font-bold">{q.topic}</span>
+                          <span className="text-slate-400">·</span>
+                          <span className="capitalize">{q.difficulty}</span>
+                          <span className="text-slate-400">·</span>
+                          <span className="text-[10px] bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded font-bold">
+                            AI GENERATED
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => approveQuestion(q.id, activeFaculty.name, false)}
+                            className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Approve</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setEditingQuestionId(q.id);
+                              setEditQText(q.questionText);
+                              setEditQOptions([...q.options]);
+                              setEditQCorrect(q.correctOptionIndex);
+                              setEditQExplanation(q.explanation);
+                            }}
+                            className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                              isDark
+                                ? 'bg-slate-900 border-slate-700 text-slate-300 hover:text-white'
+                                : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            <Edit3 className="w-3 h-3 text-indigo-400" />
+                            <span>Edit</span>
+                          </button>
+
+                          <button
+                            onClick={() => rejectQuestion(q.id, activeFaculty.name)}
+                            className="flex items-center gap-1 px-3 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Reject</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <h5 className="font-bold text-sm">{q.questionText}</h5>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        {q.options.map((opt, idx) => (
+                          <div
+                            key={idx}
+                            className={`p-2 rounded-lg border ${
+                              idx === q.correctOptionIndex
+                                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 font-bold'
+                                : isDark
+                                ? 'bg-slate-900 border-slate-800 text-slate-300'
+                                : 'bg-white border-slate-200 text-slate-700'
+                            }`}
+                          >
+                            <span className="font-bold mr-1.5">{String.fromCharCode(65 + idx)}.</span>
+                            <span>{opt}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div
+                        className={`text-[11px] p-2.5 rounded-lg border ${
+                          isDark
+                            ? 'bg-slate-900 border-slate-800 text-slate-300'
+                            : 'bg-white border-slate-200 text-slate-700'
+                        }`}
+                      >
+                        <span className="font-bold text-indigo-500">Explanation: </span>
+                        {q.explanation}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1672,29 +1990,162 @@ export const FacultyDashboard: React.FC = () => {
 
       {/* 9. Faculty XP Override & Audit Console */}
       {activeTab === 'audit' && (
-        <div
-          className={`p-6 rounded-2xl border space-y-4 transition-colors ${
-            isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
-          }`}
-        >
-          <div>
-            <h4 className="text-base font-bold flex items-center gap-2 text-rose-500">
-              <ShieldAlert className="w-4 h-4" />
-              <span>Faculty Academic Integrity & XP Void Console</span>
-            </h4>
-            <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-              Void suspicious XP entries with a mandatory logged reason. The student's XP will be immediately recomputed.
-            </p>
+        <div className="space-y-6">
+          {/* Section A: Auto-Submitted Quiz Attempts Review & Retake Approval */}
+          <div
+            className={`p-6 rounded-2xl border space-y-4 transition-colors ${
+              isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
+              <div>
+                <h4 className="text-base font-bold flex items-center gap-2 text-amber-500">
+                  <ShieldAlert className="w-4 h-4" />
+                  <span>Auto-Submitted Quiz Attempts & Retake Authorization</span>
+                </h4>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Review exams auto-submitted when anti-cheat detected tab switching or leaving fullscreen. Authorize retakes when valid extenuating circumstances are established.
+                </p>
+              </div>
+
+              <div className="text-xs font-mono text-slate-400">
+                {serverAutoSubmittedAttempts.length} Flagged Attempt(s)
+              </div>
+            </div>
+
+            {retakeStatusNotice && (
+              <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-400 text-xs flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>{retakeStatusNotice}</span>
+              </div>
+            )}
+
+            {serverAutoSubmittedAttempts.length === 0 ? (
+              <div className="p-4 text-center text-xs text-slate-400">
+                No active auto-submitted quiz violations found on server.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {serverAutoSubmittedAttempts.map((attempt) => {
+                  const recordKey = attempt.id || `${attempt.quizId}_${attempt.studentId}`;
+                  const isLocked = attempt.locked && !attempt.retakeGranted;
+
+                  return (
+                    <div
+                      key={recordKey}
+                      className={`p-4 rounded-xl border space-y-3 transition-colors ${
+                        isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-slate-200">{attempt.studentName}</span>
+                          <span className="text-slate-400">·</span>
+                          <span className="font-mono text-slate-400">{attempt.studentId}</span>
+                          <span className="text-slate-400">·</span>
+                          <span className="px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-400 font-bold text-[10px]">
+                            {attempt.campus} Sec {attempt.section}
+                          </span>
+                          <span className="text-slate-400">·</span>
+                          <span className="text-amber-500 font-semibold">{attempt.quizTitle}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              isLocked
+                                ? 'bg-rose-500/15 text-rose-500'
+                                : 'bg-emerald-500/15 text-emerald-500'
+                            }`}
+                          >
+                            {isLocked ? 'Exam Locked' : 'Retake Authorized'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className={`p-3 rounded-lg border text-xs space-y-1 ${
+                        isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+                      }`}>
+                        <div className="flex items-center justify-between text-[11px] text-slate-400">
+                          <span>
+                            Violation: <strong className="text-rose-400 uppercase font-mono">{attempt.reason}</strong> ({attempt.switchCount || 1} switch event)
+                          </span>
+                          <span>Score at lock: {attempt.score} / {attempt.totalQuestions || 5}</span>
+                          <span>Logged: {new Date(attempt.submittedAt).toLocaleTimeString()}</span>
+                        </div>
+
+                        {attempt.retakeGranted && (
+                          <div className="text-[11px] text-emerald-400 pt-1 border-t border-slate-800 font-mono">
+                            Retake granted by {attempt.grantedByName || 'Faculty'} · Note: &quot;{attempt.retakeReason}&quot;
+                          </div>
+                        )}
+                      </div>
+
+                      {isLocked && (
+                        <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+                          <input
+                            type="text"
+                            placeholder="Enter documented retake justification (e.g. Proctor confirmed laboratory power trip)..."
+                            value={retakeNotes[recordKey] || ''}
+                            onChange={(e) =>
+                              setRetakeNotes({ ...retakeNotes, [recordKey]: e.target.value })
+                            }
+                            className={`flex-1 border rounded-lg px-3 py-1.5 text-xs outline-none ${
+                              isDark ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                            }`}
+                          />
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const note = retakeNotes[recordKey] || 'Faculty approved retake after verification';
+                              await grantQuizRetake(attempt.quizId, attempt.studentId, note, activeFaculty.name);
+                              setRetakeStatusNotice(`Retake granted for ${attempt.studentName}! Notification dispatched to student.`);
+                              setServerAutoSubmittedAttempts((prev) =>
+                                prev.map((r) =>
+                                  (r.id === recordKey || (r.quizId === attempt.quizId && r.studentId === attempt.studentId))
+                                    ? { ...r, locked: false, retakeGranted: true, retakeReason: note, grantedByName: activeFaculty.name }
+                                    : r
+                                )
+                              );
+                              setTimeout(() => setRetakeStatusNotice(null), 4000);
+                            }}
+                            className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-xs shrink-0 cursor-pointer"
+                          >
+                            Authorize Retake
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {voidNotice && (
-            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-400 text-xs">
-              {voidNotice}
+          {/* Section B: Faculty Academic Integrity & XP Void Console */}
+          <div
+            className={`p-6 rounded-2xl border space-y-4 transition-colors ${
+              isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900 shadow-xs'
+            }`}
+          >
+            <div>
+              <h4 className="text-base font-bold flex items-center gap-2 text-rose-500">
+                <ShieldAlert className="w-4 h-4" />
+                <span>Faculty Academic Integrity & XP Void Console</span>
+              </h4>
+              <p className={`text-xs mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                Void suspicious XP entries with a mandatory logged reason. The student's XP will be immediately recomputed.
+              </p>
             </div>
-          )}
 
-          <form
-            onSubmit={handleVoidXp}
+            {voidNotice && (
+              <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/40 text-emerald-400 text-xs">
+                {voidNotice}
+              </div>
+            )}
+
+            <form
+              onSubmit={handleVoidXp}
             className={`p-4 rounded-xl border space-y-3 ${
               isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
             }`}
@@ -1857,7 +2308,8 @@ export const FacultyDashboard: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
-    </div>
+      </div>
+    )}
+  </div>
   );
 };

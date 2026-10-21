@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '../../store/appStore';
 import { Campus, LeagueTier, StudentProfile } from '../../types';
@@ -6,6 +6,8 @@ import { Trophy, ArrowUp, ArrowDown, Shield, Download, Play, TrendingUp, Sparkle
 import { StreakFlame } from '../common/StreakFlame';
 import { LeagueEmblem } from '../common/GameIcons';
 import { ClosedChestIcon, OpenChestIcon } from '../common/ChestIcons';
+import { LeaguesSkeleton } from '../common/Skeletons';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 
 export const LeaguesLeaderboard: React.FC = () => {
   const {
@@ -15,15 +17,30 @@ export const LeaguesLeaderboard: React.FC = () => {
     isDark,
     triggerChestReward,
     claimedRewardIds,
+    isSessionReady,
   } = useApp();
 
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 200);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const safeLeague: LeagueTier = activeStudent?.league || 'Bronze';
+  const safeCampus: Campus = activeStudent?.campus || 'Rathinam';
+
   const [activeTab, setActiveTab] = useState<'league' | 'campus' | 'batch' | 'personal_best'>('league');
-  const [selectedLeague, setSelectedLeague] = useState<LeagueTier>(activeStudent.league);
-  const [selectedCampus, setSelectedCampus] = useState<Campus>(activeStudent.campus);
+  const [selectedLeague, setSelectedLeague] = useState<LeagueTier>(safeLeague);
+  const [selectedCampus, setSelectedCampus] = useState<Campus>(safeCampus);
   const [simulationResult, setSimulationResult] = useState<{ promotedCount: number; relegatedCount: number } | null>(null);
 
-  // All students participate in rankings
-  const publicStudents = students;
+  // All students participate in rankings safely
+  const publicStudents = Array.isArray(students) ? students : [];
+
+  if (isLoading || !isSessionReady) {
+    return <LeaguesSkeleton isDark={isDark} />;
+  }
 
   // League rankings
   const leagueStudents = publicStudents

@@ -267,6 +267,13 @@ export function processXpEvent(
       break;
     }
 
+    case 'quest_reward': {
+      actionType = 'quest_reward';
+      pointsToAward = event.metadata.xpAwarded ?? event.metadata.amount ?? rule.xpValue;
+      description = `Reward Chest: ${event.metadata.rewardTitle || 'Quest Reward'}`;
+      break;
+    }
+
     default:
       pointsToAward = rule.xpValue;
       description = rule.label;

@@ -49,6 +49,8 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ onOpenQuizMo
     navSection,
     setNavSection,
     openProfileModal,
+    resetAllData,
+    logout,
   } = useApp();
 
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -102,10 +104,8 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ onOpenQuizMo
     }
 
     if (sectionId === 'logout') {
-      // Prompt role switcher or switch to student default
       setIsDrawerOpen(false);
-      setRole(role === 'student' ? 'faculty' : role === 'faculty' ? 'admin' : 'student');
-      setNavSection('dashboard:overview');
+      logout();
       return;
     }
 
@@ -171,7 +171,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ onOpenQuizMo
       ? `${activeStudent.campus} Campus`
       : role === 'faculty'
       ? `${activeFaculty.campus} Campus`
-      : 'Institutional Governance · 4 Campuses';
+      : 'Institutional Governance · 3 Campuses';
 
   const roleLabel =
     role === 'student'
@@ -191,7 +191,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ onOpenQuizMo
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={() => setIsDrawerOpen(false)}
-            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs"
+            className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs"
             aria-hidden="true"
           />
 
@@ -205,8 +205,8 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ onOpenQuizMo
             className={`relative w-[82vw] max-w-xs sm:w-80 h-full shadow-2xl flex flex-col z-10 border-r transition-colors ${
               role === 'student'
                 ? isDark
-                  ? 'bg-slate-900/80 backdrop-blur-2xl border-slate-800/70 text-slate-100'
-                  : 'bg-white/80 backdrop-blur-2xl border-slate-200/70 text-slate-900'
+                  ? 'bg-slate-900/70 backdrop-blur-2xl border-slate-800/60 text-slate-100'
+                  : 'bg-white/75 backdrop-blur-2xl border-slate-200/60 text-slate-900'
                 : isDark
                 ? 'bg-slate-900 border-slate-800 text-slate-100'
                 : 'bg-white border-slate-200 text-slate-900'
@@ -217,8 +217,8 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ onOpenQuizMo
               className={`p-4 sm:p-5 border-b flex items-center justify-between transition-colors ${
                 role === 'student'
                   ? isDark
-                    ? 'bg-slate-950/60 border-slate-800/60'
-                    : 'bg-indigo-50/50 border-slate-200/60'
+                    ? 'bg-slate-950/45 border-slate-800/50'
+                    : 'bg-indigo-50/45 border-slate-200/50'
                   : isDark
                   ? 'bg-slate-950/80 border-slate-800'
                   : 'bg-gradient-to-br from-indigo-50/70 via-white to-slate-50 border-slate-200'
@@ -436,9 +436,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({ onOpenQuizMo
                   {/* Mobile Quick Reset Button */}
                   <button
                     onClick={() => {
-                      const { resetAllData } = useApp();
-                      // In NavigationDrawer we can call reset
-                      window.location.reload();
+                      resetAllData();
                     }}
                     title="Reset all demo data"
                     className={`sm:hidden p-2.5 rounded-xl border transition-colors flex items-center justify-center cursor-pointer touch-target ${

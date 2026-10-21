@@ -1,27 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../store/appStore';
 import { auditStudentTotalXp } from '../../modules/xpEngine';
 import { Filter, Download, ShieldCheck, AlertCircle, Calendar } from 'lucide-react';
+import { LedgerSkeleton } from '../common/Skeletons';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 
 export const XpLedgerView: React.FC = () => {
-  const { activeStudent, ledger, isDark } = useApp();
+  const { activeStudent, ledger, isDark, isSessionReady } = useApp();
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [filterType, setFilterType] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('');
 
-  const studentLedger = ledger.filter((e) => e.studentId === activeStudent.id);
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 200);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const safeStudentId = activeStudent?.id || '';
+  const safeLedger = Array.isArray(ledger) ? ledger : [];
+
+  const studentLedger = safeLedger.filter((e) => e && e.studentId === safeStudentId);
 
   const filteredEntries = studentLedger.filter((entry) => {
+    if (!entry) return false;
     if (filterType !== 'all' && entry.actionType !== filterType) return false;
     if (dateFilter && entry.date !== dateFilter) return false;
     return true;
   });
 
   const { calculatedTotal, validEntriesCount, voidedEntriesCount } = auditStudentTotalXp(
-    activeStudent.id,
-    ledger
+    safeStudentId,
+    safeLedger
   );
 
-  const isAuditMatch = calculatedTotal === activeStudent.totalXp;
+  const isAuditMatch = calculatedTotal === (activeStudent?.totalXp ?? 0);
+
+  if (isLoading || !isSessionReady) {
+    return <LedgerSkeleton isDark={isDark} />;
+  }
 
   const handleExportCsv = () => {
     const displayName = activeStudent.name;
@@ -57,6 +73,8 @@ export const XpLedgerView: React.FC = () => {
     { id: 'club', label: 'Club' },
     { id: 'streak', label: 'Streak' },
     { id: 'peer_help', label: 'Peer Help' },
+    { id: 'boss_battle', label: 'Boss Battle' },
+    { id: 'quest_reward', label: 'Reward Chest' },
   ];
 
   const cardBg = isDark

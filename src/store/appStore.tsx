@@ -99,6 +99,9 @@ interface AppContextType {
   gradeAssignmentSubmission: (subId: string, grade: number, feedback: string, facultyName: string) => void;
   importCodingProblem: (problem: CodingProblem) => void;
   addCodingProblem: (problem: CodingProblem) => void;
+  updateCodingProblem: (problemId: string, updates: Partial<CodingProblem>) => void;
+  deleteCodingProblem: (problemId: string) => void;
+  reorderCodingProblems: (problemIds: string[]) => void;
   solveCodingProblem: (studentId: string, problemId: string) => { success: boolean; pointsAwarded: number; message: string; nextProblemId?: string };
   generateAiTopicQuestions: (topicId: string, count?: number) => Promise<{ success: boolean; count: number; message: string }>;
   triggerXpEvent: (event: XpEvent) => { success: boolean; pointsAwarded: number; reason: string; rejectedReason?: string };
@@ -109,7 +112,7 @@ interface AppContextType {
   answerPeerDoubt: (postId: string, answerText: string) => void;
   acceptPeerAnswer: (postId: string, answerId: string) => Promise<{ success: boolean; message: string; xpAwarded?: number }>;
   addPeerPost: (title: string, body: string, subject: string, topic: string) => void;
-  approveQuestion: (questionId: string, facultyName: string) => void;
+  approveQuestion: (questionId: string, facultyName: string, wasEdited?: boolean) => void;
   rejectQuestion: (questionId: string, facultyName: string) => void;
   addQuestion: (q: Omit<Question, 'id' | 'createdAt'>) => void;
   toggleSyllabusTopicTaught: (subjectId: string, weekNumber: number) => void;
@@ -213,6 +216,17 @@ interface AppContextType {
     onFlyComplete?: () => void;
   }) => boolean;
   closeChestReward: () => void;
+
+  // Authentication & Phone OTP
+  isLoginModalOpen: boolean;
+  setIsLoginModalOpen: (open: boolean) => void;
+  openLoginModal: () => void;
+  closeLoginModal: () => void;
+  authToken: string | null;
+  handleAuthSuccess: (token: string, user: any) => void;
+  logout: () => void;
+  isSessionReady: boolean;
+  refreshSession: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -419,6 +433,97 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const toggleDrawer = () => setIsDrawerOpen((prev) => !prev);
 
+  // Authentication & Phone OTP Modal
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('mq_auth_token');
+    } catch {
+      return null;
+    }
+  });
+
+  const [isSessionReady, setIsSessionReady] = useState<boolean>(() => {
+    try {
+      const token = localStorage.getItem('mq_auth_token');
+      return !token; // Ready immediately if there's no auth token to verify
+    } catch {
+      return true;
+    }
+  });
+
+  const openLoginModal = () => setIsLoginModalOpen(true);
+  const closeLoginModal = () => setIsLoginModalOpen(false);
+
+  const handleAuthSuccess = (token: string, user: any) => {
+    try {
+      localStorage.setItem('mq_auth_token', token);
+    } catch {}
+    setAuthToken(token);
+    setRole(user.role);
+    if (user.role === 'student') {
+      setActiveStudentId(user.id);
+      setNavSection('dashboard:overview');
+    } else if (user.role === 'faculty') {
+      setActiveFacultyId(user.id);
+      setNavSection('faculty:analytics');
+    } else if (user.role === 'admin') {
+      setNavSection('admin:rules');
+    }
+    setIsSessionReady(true);
+    setIsLoginModalOpen(false);
+  };
+
+  const logout = async () => {
+    try {
+      if (authToken) {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+      }
+      localStorage.removeItem('mq_auth_token');
+    } catch {}
+    setAuthToken(null);
+    setIsSessionReady(true);
+    setIsLoginModalOpen(true);
+  };
+
+  const refreshSession = async () => {
+    const token = localStorage.getItem('mq_auth_token');
+    if (!token) {
+      setIsSessionReady(true);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.authenticated && data.user) {
+        setRole(data.user.role);
+        if (data.user.role === 'student' && data.user.id) {
+          setActiveStudentId(data.user.id);
+        } else if (data.user.role === 'faculty' && data.user.id) {
+          setActiveFacultyId(data.user.id);
+        }
+      } else {
+        localStorage.removeItem('mq_auth_token');
+        setAuthToken(null);
+      }
+    } catch (err) {
+      console.warn('Could not verify auth session:', err);
+    } finally {
+      setIsSessionReady(true);
+    }
+  };
+
+  // Restore authenticated session on mount
+  useEffect(() => {
+    refreshSession();
+  }, []);
+
   // Theme mode: light and dark only (default: light)
   const [theme, setTheme] = useState<ThemeMode>(() => {
     try {
@@ -613,7 +718,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       triggerXpEvent({
         eventId: `ev_chest_${config.id}_${Date.now()}`,
         studentId: activeStudentId,
-        actionKey: 'solve_coding',
+        actionKey: 'quest_reward',
         timestamp: new Date().toISOString(),
         metadata: {
           rewardTitle: config.title || 'Chest Reward Claim',
@@ -790,7 +895,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateQuestion = (questionId: string, updates: Partial<Question>) => {
-    setQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, ...updates } : q)));
+    setQuestions((prev) => prev.map((q) => (q.id === questionId ? { ...q, ...updates, editedBeforeApproval: true } : q)));
   };
 
   // Anti-Cheat Logs & Auto-Submission tracking
@@ -1137,15 +1242,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     navSection,
   ]);
 
-  const activeStudent = students.find((s) => s.id === activeStudentId) || students[0];
-  const activeFaculty = facultyList.find((f) => f.id === activeFacultyId) || facultyList[0];
+  const activeStudent = useMemo(() => {
+    if (students && students.length > 0) {
+      return students.find((s) => s.id === activeStudentId) || students[0];
+    }
+    return INITIAL_STUDENTS[0];
+  }, [students, activeStudentId]);
+
+  const activeFaculty = useMemo(() => {
+    if (facultyList && facultyList.length > 0) {
+      return facultyList.find((f) => f.id === activeFacultyId) || facultyList[0];
+    }
+    return INITIAL_FACULTY[0];
+  }, [facultyList, activeFacultyId]);
 
   // Real-time WebSocket Gateway (Students Only)
   useEffect(() => {
-    if (role !== 'student') return;
+    if (role !== 'student' || !activeStudent?.id) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/notifications?userId=${activeStudent.id}&role=student&campus=${activeStudent.campus}&year=${activeStudent.year}&section=${activeStudent.section}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws/notifications?userId=${encodeURIComponent(activeStudent.id)}&role=student&campus=${encodeURIComponent(activeStudent.campus || '')}&year=${encodeURIComponent(activeStudent.year || '')}&section=${encodeURIComponent(activeStudent.section || '')}`;
 
     let ws: WebSocket | null = null;
     try {
@@ -1163,7 +1279,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       if (ws) ws.close();
     };
-  }, [role, activeStudent.id, activeStudent.campus, activeStudent.year, activeStudent.section]);
+  }, [role, activeStudent?.id, activeStudent?.campus, activeStudent?.year, activeStudent?.section]);
 
   const triggerConfetti = () => {
     confetti({
@@ -1294,6 +1410,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addCodingProblem = (problem: CodingProblem) => {
     setImportedProblems((prev) => [problem, ...prev]);
+  };
+
+  const updateCodingProblem = (problemId: string, updates: Partial<CodingProblem>) => {
+    setImportedProblems((prev) =>
+      prev.map((p) => (p.id === problemId ? { ...p, ...updates } : p))
+    );
+  };
+
+  const deleteCodingProblem = (problemId: string) => {
+    setImportedProblems((prev) => prev.filter((p) => p.id !== problemId));
+  };
+
+  const reorderCodingProblems = (problemIds: string[]) => {
+    setImportedProblems((prev) => {
+      const map = new Map(prev.map((p) => [p.id, p]));
+      const reordered: CodingProblem[] = [];
+      problemIds.forEach((id) => {
+        const found = map.get(id);
+        if (found) {
+          reordered.push(found);
+          map.delete(id);
+        }
+      });
+      return [...reordered, ...Array.from(map.values())];
+    });
   };
 
   // Generate 10 AI Questions for a topic and put in Teacher Approval Queue
@@ -1730,7 +1871,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           callerRole: role,
           doubtTitle: post.title,
           isAlreadyLocked: post.isLocked || false,
-          helperTodayAcceptedCount: 0,
+          helperTodayAcceptedCount: ledger.filter(
+            (entry) =>
+              entry.studentId === answer.authorId &&
+              entry.date === new Date().toISOString().split('T')[0] &&
+              entry.actionKey === 'peer_help' &&
+              entry.status === 'valid'
+          ).length,
         }),
       });
 
@@ -1889,11 +2036,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const approveQuestion = (questionId: string, facultyName: string) => {
+  const approveQuestion = (questionId: string, facultyName: string, wasEdited: boolean = false) => {
     setQuestions((prev) =>
       prev.map((q) =>
         q.id === questionId
-          ? { ...q, status: 'approved', reviewedBy: facultyName }
+          ? {
+              ...q,
+              status: 'approved',
+              reviewedBy: facultyName,
+              editedBeforeApproval: q.editedBeforeApproval || wasEdited,
+            }
           : q
       )
     );
@@ -2343,6 +2495,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setNavSection,
         importCodingProblem,
         addCodingProblem,
+        updateCodingProblem,
+        deleteCodingProblem,
+        reorderCodingProblems,
         solveCodingProblem,
         generateAiTopicQuestions,
         createAssignment,
@@ -2423,6 +2578,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headerPulseTrigger,
         triggerChestReward,
         closeChestReward,
+        isLoginModalOpen,
+        setIsLoginModalOpen,
+        openLoginModal,
+        closeLoginModal,
+        authToken,
+        handleAuthSuccess,
+        logout,
+        isSessionReady,
+        refreshSession,
       }}
     >
       {children}

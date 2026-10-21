@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../store/appStore';
 import { Sparkles, Trophy, ArrowRight, X } from 'lucide-react';
-import { fireLevelUpConfetti } from '../utils/confetti';
+import { fireLevelAscensionConfetti } from '../utils/confetti';
 
 export const LevelAscensionModal: React.FC = () => {
   const { rankProgressModal, closeRankProgressModal, theme } = useApp();
@@ -10,7 +10,7 @@ export const LevelAscensionModal: React.FC = () => {
 
   useEffect(() => {
     if (rankProgressModal?.show) {
-      fireLevelUpConfetti();
+      fireLevelAscensionConfetti();
     }
   }, [rankProgressModal?.show]);
 

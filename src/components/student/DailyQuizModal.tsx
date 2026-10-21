@@ -14,7 +14,7 @@ interface DailyQuizModalProps {
 }
 
 export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose }) => {
-  const { questions, syllabusList, claimDailyQuizReward, isDark, setIsFocusCriticalActive } = useApp();
+  const { questions, syllabusList, claimDailyQuizReward, isDark, setIsFocusCriticalActive, activeStudent } = useApp();
 
   useEffect(() => {
     if (isOpen) {
@@ -35,6 +35,10 @@ export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose 
   const [isCompleted, setIsCompleted] = useState(false);
   const [rewardResult, setRewardResult] = useState<{ success: boolean; xpEarned: number; reason?: string } | null>(null);
 
+  // Anti-Cheat states
+  const [isAutoSubmitted, setIsAutoSubmitted] = useState(false);
+  const [autoSubmitReason, setAutoSubmitReason] = useState<string | null>(null);
+
   // AI & Hinglish states
   const [studyBuddyHint, setStudyBuddyHint] = useState<string | null>(null);
   const [loadingHint, setLoadingHint] = useState(false);
@@ -42,6 +46,76 @@ export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose 
   const [loadingHinglish, setLoadingHinglish] = useState(false);
   const [showHinglish, setShowHinglish] = useState(false);
   const [rapidFireWarning, setRapidFireWarning] = useState<string | null>(null);
+
+  // Anti-Cheat: Tab switch & blur auto-submission
+  useEffect(() => {
+    if (!isOpen || isCompleted || isAutoSubmitted || activeQuestions.length === 0) return;
+
+    let hasFired = false;
+
+    const handleViolation = async (reason: string) => {
+      if (hasFired) return;
+      hasFired = true;
+      setIsAutoSubmitted(true);
+      setAutoSubmitReason(reason);
+      setIsAnswered(true);
+
+      try {
+        await fetch('/api/quiz/auto-submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId: activeStudent.id,
+            studentName: activeStudent.name,
+            campus: activeStudent.campus,
+            section: activeStudent.section,
+            quizId: `daily_quiz_${selectedSubject}`,
+            quizTitle: `Daily Quiz: ${selectedSubject.toUpperCase()}`,
+            score: score,
+            totalQuestions: activeQuestions.length,
+            reason: reason,
+            switchCount: 1,
+          }),
+        });
+
+        await fetch('/api/anticheat/log-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId: activeStudent.id,
+            studentName: activeStudent.name,
+            campus: activeStudent.campus,
+            section: activeStudent.section,
+            eventType: 'tab_switch_during_quiz',
+            quizId: `daily_quiz_${selectedSubject}`,
+            quizTitle: `Daily Quiz: ${selectedSubject.toUpperCase()}`,
+            details: `Anti-cheat trigger: Student switched tabs or window lost focus during evaluation. Auto-submitted with ${score}/${activeQuestions.length}.`,
+            severity: 'high',
+          }),
+        });
+      } catch (err) {
+        console.error('Failed to report anti-cheat event:', err);
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        handleViolation('tab_switch');
+      }
+    };
+
+    const onWindowBlur = () => {
+      handleViolation('window_unfocused');
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', onWindowBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', onWindowBlur);
+    };
+  }, [isOpen, isCompleted, isAutoSubmitted, activeQuestions.length, score, activeStudent, selectedSubject]);
 
   // Initialize questions from taught weeks of selected subject
   useEffect(() => {
@@ -172,10 +246,28 @@ export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose 
     : 'bg-slate-50 border-slate-200';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
+    <div
+      onContextMenu={(e) => e.preventDefault()}
+      onCopy={(e) => e.preventDefault()}
+      onCut={(e) => e.preventDefault()}
+      onPaste={(e) => e.preventDefault()}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200 select-none"
+    >
       <div className={`relative w-full sm:max-w-2xl h-[100dvh] sm:h-auto sm:max-h-[90vh] border-0 sm:border rounded-none sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col transition-colors pb-safe ${cardBg}`}>
+        {/* Anti-Cheat Student Watermark */}
+        <div className="absolute inset-0 pointer-events-none select-none overflow-hidden opacity-[0.05] flex flex-wrap gap-12 items-center justify-around z-0">
+          {Array.from({ length: 16 }).map((_, i) => (
+            <div
+              key={i}
+              className="transform -rotate-12 text-[10px] font-mono font-bold whitespace-nowrap text-slate-500 select-none"
+            >
+              {activeStudent.name} · {activeStudent.rollNumber} · {activeStudent.campus}
+            </div>
+          ))}
+        </div>
+
         {/* Header */}
-        <div className={`px-4 sm:px-6 py-3.5 sm:py-4 border-b flex items-center justify-between shrink-0 ${headerBg}`}>
+        <div className={`px-4 sm:px-6 py-3.5 sm:py-4 border-b flex items-center justify-between shrink-0 relative z-10 ${headerBg}`}>
           <div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold">Daily Micro-Challenge</span>
@@ -193,8 +285,33 @@ export const DailyQuizModal: React.FC<DailyQuizModalProps> = ({ isOpen, onClose 
         </div>
 
         {/* Content */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-          {!isCompleted ? (
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 relative z-10">
+          {isAutoSubmitted ? (
+            <div className="py-8 px-4 text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 mx-auto flex items-center justify-center">
+                <AlertTriangle className="w-8 h-8" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-rose-500">Evaluation Auto-Submitted & Locked</h4>
+                <p className={`text-xs mt-1 max-w-md mx-auto ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Academic Integrity Policy violation: Tab switch or unfocused window detected during timed evaluation.
+                  Your score has been recorded as <strong>{score}/{activeQuestions.length}</strong> and locked on the server.
+                </p>
+                <div className={`mt-3 p-3 rounded-xl border text-[11px] font-mono max-w-sm mx-auto text-left ${subBoxBg}`}>
+                  <div>Student: <strong>{activeStudent.name}</strong> ({activeStudent.rollNumber})</div>
+                  <div>Campus: {activeStudent.campus} · Sec {activeStudent.section}</div>
+                  <div>Violation: {autoSubmitReason === 'tab_switch' ? 'Tab Switch / App Background' : 'Window Unfocused'}</div>
+                  <div>Incident Dispatched: Faculty Register (Prof. Priya Nair)</div>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="py-2.5 px-6 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition-all cursor-pointer shadow-md"
+              >
+                Close & Return to Dashboard
+              </button>
+            </div>
+          ) : !isCompleted ? (
             activeQuestions.length === 0 ? (
               <div className={`text-center py-12 text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 No approved questions available for current syllabus topics. Please check back after faculty approval.

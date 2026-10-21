@@ -21,7 +21,7 @@ export function fireConfetti(options?: confetti.Options) {
   }
 }
 
-export function fireLevelUpConfetti() {
+export function fireLevelAscensionConfetti() {
   if (prefersReducedMotion()) return;
   try {
     const count = 200;
@@ -64,6 +64,6 @@ export function fireLevelUpConfetti() {
       startVelocity: 45,
     });
   } catch (err) {
-    console.debug('Level up confetti failed', err);
+    console.debug('Level ascension confetti effect failed', err);
   }
 }

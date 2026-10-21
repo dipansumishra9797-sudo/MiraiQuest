@@ -22,6 +22,78 @@ export const BossBattleModal: React.FC<BossBattleModalProps> = ({ isOpen, onClos
   const [selectedOpt, setSelectedOpt] = useState<number | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [isAutoSubmitted, setIsAutoSubmitted] = useState(false);
+  const [autoSubmitReason, setAutoSubmitReason] = useState<string | null>(null);
+
+  // Anti-Cheat: Tab switch & blur auto-submission
+  useEffect(() => {
+    if (!isOpen || isCompleted || isAutoSubmitted) return;
+
+    let hasFired = false;
+
+    const handleViolation = async (reason: string) => {
+      if (hasFired) return;
+      hasFired = true;
+      setIsAutoSubmitted(true);
+      setAutoSubmitReason(reason);
+      setIsAnswered(true);
+
+      try {
+        await fetch('/api/quiz/auto-submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId: activeStudent.id,
+            studentName: activeStudent.name,
+            campus: activeStudent.campus,
+            section: activeStudent.section,
+            quizId: 'boss_battle_midterm',
+            quizTitle: 'Mid-Term Boss Gauntlet',
+            score: currentStage,
+            totalQuestions: 5,
+            reason: reason,
+            switchCount: 1,
+          }),
+        });
+
+        await fetch('/api/anticheat/log-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId: activeStudent.id,
+            studentName: activeStudent.name,
+            campus: activeStudent.campus,
+            section: activeStudent.section,
+            eventType: 'tab_switch_during_boss_battle',
+            quizId: 'boss_battle_midterm',
+            quizTitle: 'Mid-Term Boss Gauntlet',
+            details: `Anti-cheat trigger: Student switched tabs during boss battle gauntlet. Auto-submitted at Stage ${currentStage + 1}.`,
+            severity: 'high',
+          }),
+        });
+      } catch (err) {
+        console.error('Failed to report anti-cheat event:', err);
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        handleViolation('tab_switch');
+      }
+    };
+
+    const onWindowBlur = () => {
+      handleViolation('window_unfocused');
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', onWindowBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', onWindowBlur);
+    };
+  }, [isOpen, isCompleted, isAutoSubmitted, currentStage, activeStudent]);
 
   if (!isOpen) return null;
 
@@ -99,9 +171,24 @@ export const BossBattleModal: React.FC<BossBattleModalProps> = ({ isOpen, onClos
     : 'bg-slate-50 border-slate-200';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
+    <div
+      onContextMenu={(e) => e.preventDefault()}
+      onCopy={(e) => e.preventDefault()}
+      onPaste={(e) => e.preventDefault()}
+      onCut={(e) => e.preventDefault()}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200 select-none"
+    >
       <div className={`relative w-full sm:max-w-xl h-[100dvh] sm:h-auto sm:max-h-[90vh] border-0 sm:border rounded-none sm:rounded-2xl p-4 sm:p-6 shadow-2xl overflow-y-auto flex flex-col justify-between transition-colors pb-safe ${cardBg}`}>
-        <div className={`flex items-center justify-between pb-3 sm:pb-4 border-b mb-4 shrink-0 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+        {/* Dynamic Security Watermark */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden select-none opacity-[0.05] flex flex-wrap items-center justify-around gap-12 p-4 rotate-[-15deg] z-0">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <span key={i} className="text-xs font-mono font-bold tracking-widest uppercase">
+              {activeStudent.name} · {activeStudent.rollNumber} · {activeStudent.campus}
+            </span>
+          ))}
+        </div>
+
+        <div className={`relative z-10 flex items-center justify-between pb-3 sm:pb-4 border-b mb-4 shrink-0 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           <div className="flex items-center gap-2">
             <Crown className="w-5 h-5 text-amber-500" />
             <div>
@@ -115,8 +202,34 @@ export const BossBattleModal: React.FC<BossBattleModalProps> = ({ isOpen, onClos
           </button>
         </div>
 
-        {!isCompleted ? (
-          <div>
+        {isAutoSubmitted ? (
+          <div className="relative z-10 text-center py-8">
+            <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 flex items-center justify-center mx-auto mb-4">
+              <X className="w-8 h-8" />
+            </div>
+            <h4 className="text-xl font-bold text-rose-500 mb-2">Boss Gauntlet Auto-Submitted</h4>
+            <p className={`text-xs max-w-md mx-auto mb-4 leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+              Anti-cheat detected a tab-switch or window defocus event ({autoSubmitReason || 'unfocused'}).
+              The gauntlet was automatically locked and submitted. Your faculty supervisor has been logged with the timestamp and telemetry snapshot.
+            </p>
+            <div className={`p-3.5 rounded-xl border text-xs max-w-sm mx-auto mb-6 text-left ${subBoxBg}`}>
+              <div className="font-semibold text-rose-500 mb-1">Incident Record Logged:</div>
+              <div className="text-[11px] text-slate-400 font-mono">
+                Candidate: {activeStudent.name} ({activeStudent.rollNumber})<br />
+                Campus: {activeStudent.campus} · Section {activeStudent.section}<br />
+                Stage Reached: {currentStage + 1} / {bossStages.length}<br />
+                Status: Flagged for Faculty Review
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="px-6 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold shadow-md cursor-pointer"
+            >
+              Acknowledge & Close
+            </button>
+          </div>
+        ) : !isCompleted ? (
+          <div className="relative z-10">
             <div className={`flex items-center justify-between text-xs mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               <span className="text-amber-500 font-semibold">{current.title}</span>
               <span className="tabular-nums">Stage {currentStage + 1} of {bossStages.length}</span>

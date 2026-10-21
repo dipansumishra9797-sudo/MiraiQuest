@@ -1064,32 +1064,29 @@ export const UserProfileModal: React.FC = () => {
                       </button>
                     </div>
 
-                    {/* Background Style Options (Orbs, Particles, Aurora, Mirai Scene, Off) */}
+                    {/* Background Style Options (Orbs + Particles, Orbs, Particles, Aurora, Off) */}
                     <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60">
                       <div className="text-xs font-bold text-slate-800 dark:text-slate-100 mb-2 flex items-center justify-between">
                         <span>Background Style</span>
                         <span className="text-[10px] text-indigo-500 font-semibold uppercase tracking-wider">
                           Active:{' '}
                           {studentBgStyle === 'all'
-                            ? 'Orbs + Particles'
+                            ? 'Orbs + Particles (Default)'
                             : studentBgStyle === 'orbs'
                             ? 'Orbs'
                             : studentBgStyle === 'particles'
                             ? 'Particles'
                             : studentBgStyle === 'aurora'
                             ? 'Aurora'
-                            : studentBgStyle === 'mirai'
-                            ? 'Mirai Scene'
                             : 'Off'}
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                         {[
-                          { id: 'all', label: 'Orbs + Particles (Default)' },
+                          { id: 'all', label: 'Orbs + Particles' },
                           { id: 'orbs', label: 'Orbs' },
                           { id: 'particles', label: 'Particles' },
                           { id: 'aurora', label: 'Aurora' },
-                          { id: 'mirai', label: 'Mirai Scene' },
                           { id: 'off', label: 'Off' },
                         ].map((styleOption) => {
                           const isSelected = studentBgStyle === styleOption.id;
@@ -1098,9 +1095,9 @@ export const UserProfileModal: React.FC = () => {
                               key={styleOption.id}
                               type="button"
                               onClick={() => setStudentBgStyle(styleOption.id as any)}
-                              className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all text-center cursor-pointer border ${
+                              className={`py-2 px-2 rounded-xl text-xs font-bold transition-all text-center cursor-pointer border ${
                                 isSelected
-                                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm ring-2 ring-indigo-500/30'
                                   : 'bg-black/5 dark:bg-white/5 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-black/10 dark:hover:bg-white/10'
                               }`}
                             >

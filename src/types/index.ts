@@ -25,7 +25,8 @@ export type XpSourceType =
   | 'club'
   | 'streak'
   | 'peer_help'
-  | 'boss_battle';
+  | 'boss_battle'
+  | 'quest_reward';
 
 export interface XpRule {
   id: string;
@@ -153,6 +154,7 @@ export interface Question {
   weekNumber: number;
   createdAt: string;
   reviewedBy?: string;
+  editedBeforeApproval?: boolean;
 }
 
 export interface SyllabusWeek {

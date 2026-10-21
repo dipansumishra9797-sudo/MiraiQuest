@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   ShieldCheck,
 } from 'lucide-react';
+import { ErrorBoundary } from './common/ErrorBoundary';
 
 export const OpenSourceGuideView: React.FC = () => {
   const { isDark, setNavSection, role } = useApp();
@@ -21,6 +22,19 @@ export const OpenSourceGuideView: React.FC = () => {
   const timeoutTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const FIRSTPR_URL = 'https://www.firstpr.in/';
+
+  // Clean up any body scroll / pointer locks and timers when unmounting
+  useEffect(() => {
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.body.style.overflow = '';
+        document.body.style.pointerEvents = '';
+      }
+      if (timeoutTimerRef.current) {
+        clearTimeout(timeoutTimerRef.current);
+      }
+    };
+  }, []);
 
   // Manage 6-second timeout detection for blocked/slow iframe loading
   useEffect(() => {
@@ -80,6 +94,9 @@ export const OpenSourceGuideView: React.FC = () => {
     } else {
       setNavSection('dashboard:overview');
     }
+    if (typeof window !== 'undefined' && window.location.pathname === '/open-source-guide') {
+      window.history.pushState({}, '', '/');
+    }
   };
 
   if (role === 'admin') {
@@ -98,84 +115,103 @@ export const OpenSourceGuideView: React.FC = () => {
       : 'bg-white border-slate-200 text-slate-900 shadow-sm';
 
   return (
-    <div className="w-full space-y-4 sm:space-y-5 animate-fade-in">
-      {/* Header Bar: Title, Tagline, Powered by FirstPR & Controls */}
-      <div
-        className={`p-4 sm:p-5 rounded-2xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors ${cardBg}`}
-      >
-        <div className="flex items-start sm:items-center gap-3">
-          <button
-            type="button"
-            onClick={handleBackToDashboard}
-            className={`p-2 rounded-xl border transition-all cursor-pointer shrink-0 mt-0.5 sm:mt-0 ${
-              isDark
-                ? 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
-                : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-            }`}
-            title="Back to Dashboard"
-            aria-label="Back to Dashboard"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
+    <ErrorBoundary
+      fallbackTitle="Open Source Guide unavailable"
+      fallbackMessage="Unable to load the embedded Open Source Guide. You can reload or return to your dashboard."
+      onReset={handleBackToDashboard}
+    >
+      <div className="w-full space-y-4 sm:space-y-5 animate-fade-in relative z-0">
+        {/* Header Bar: Title, Tagline, Powered by FirstPR & Controls */}
+        <div
+          className={`p-4 sm:p-5 rounded-2xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors ${cardBg}`}
+        >
+          <div className="flex items-start sm:items-center gap-3">
+            <button
+              type="button"
+              onClick={handleBackToDashboard}
+              className={`p-2 rounded-xl border transition-all cursor-pointer shrink-0 mt-0.5 sm:mt-0 ${
+                isDark
+                  ? 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
+                  : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+              }`}
+              title="Back to Dashboard"
+              aria-label="Back to Dashboard"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
 
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-emerald-500/15 border border-emerald-500/30 text-emerald-500">
-                <GitPullRequest className="w-3 h-3" />
-                <span>Open Source</span>
-              </span>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-emerald-500/15 border border-emerald-500/30 text-emerald-500">
+                  <GitPullRequest className="w-3 h-3" />
+                  <span>Open Source</span>
+                </span>
 
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                <span>Powered by</span>
-                <a
-                  href={FIRSTPR_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-bold text-indigo-500 hover:underline inline-flex items-center gap-0.5"
-                >
-                  <span>FirstPR</span>
-                  <ExternalLink className="w-2.5 h-2.5" />
-                </a>
-              </span>
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                  <span>Powered by</span>
+                  <a
+                    href={FIRSTPR_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold text-indigo-500 hover:underline inline-flex items-center gap-0.5"
+                  >
+                    <span>FirstPR</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                </span>
+              </div>
+
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight mt-1">
+                Open Source Guide
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5">
+                Learn how to make your first open source contribution and master git pull requests.
+              </p>
             </div>
+          </div>
 
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight mt-1">
-              Open Source Guide
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-0.5">
-              Learn how to make your first open source contribution and master git pull requests.
-            </p>
+          {/* Action Controls: Clearly visible Back to Dashboard, Reload & Open in New Tab */}
+          <div className="flex items-center gap-2 self-start md:self-auto shrink-0 flex-wrap">
+            <button
+              type="button"
+              onClick={handleBackToDashboard}
+              className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all flex items-center gap-1.5 cursor-pointer touch-target"
+              title="Return to your portal dashboard"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Dashboard</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleReload}
+              className={`px-3 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                isDark
+                  ? 'bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-700 hover:text-white'
+                  : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200 hover:text-slate-900 shadow-2xs'
+              }`}
+              title="Reload embedded guide"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-indigo-400' : ''}`} />
+              <span>Reload</span>
+            </button>
+
+            <a
+              href={FIRSTPR_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`px-3 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                isDark
+                  ? 'bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-700 hover:text-white'
+                  : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200 hover:text-slate-900 shadow-2xs'
+              }`}
+              title="Open FirstPR in a new browser tab"
+            >
+              <span>Open in new tab</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
           </div>
         </div>
-
-        {/* Action Controls: Reload & Open in New Tab */}
-        <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
-          <button
-            type="button"
-            onClick={handleReload}
-            className={`px-3 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-              isDark
-                ? 'bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-700 hover:text-white'
-                : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200 hover:text-slate-900 shadow-2xs'
-            }`}
-            title="Reload embedded guide"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-indigo-400' : ''}`} />
-            <span>Reload</span>
-          </button>
-
-          <a
-            href={FIRSTPR_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all flex items-center gap-1.5 cursor-pointer touch-target"
-            title="Open FirstPR in a new browser tab"
-          >
-            <span>Open in new tab</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-        </div>
-      </div>
 
       {/* Main Container: Embedded Iframe OR Clean Fallback Card */}
       <div
@@ -289,9 +325,10 @@ export const OpenSourceGuideView: React.FC = () => {
           loading="lazy"
           onLoad={handleIframeLoad}
           onError={handleIframeError}
-          className="w-full h-full border-0 rounded-2xl block"
-        />
-      </div>
+          className="w-full h-full border-0 rounded-2xl block relative z-0"
+      />
     </div>
+  </div>
+</ErrorBoundary>
   );
 };

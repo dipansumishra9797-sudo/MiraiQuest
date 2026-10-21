@@ -12,6 +12,29 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('msot_miraiquest_theme') || localStorage.getItem('mirai_theme');
+          var isDark = saved === 'dark' || (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (saved === 'light') isDark = false;
+          var root = document.documentElement;
+          if (isDark) {
+            root.classList.add('dark');
+            root.classList.remove('light');
+            root.style.setProperty('--splash-bg', '#020617');
+            root.style.setProperty('--splash-text', '#f8fafc');
+            root.style.setProperty('--splash-track', '#1e293b');
+          } else {
+            root.classList.add('light');
+            root.classList.remove('dark');
+            root.style.setProperty('--splash-bg', '#f8fafc');
+            root.style.setProperty('--splash-text', '#0f172a');
+            root.style.setProperty('--splash-track', '#e2e8f0');
+          }
+        } catch (e) {}
+      })();
+    </script>
     <style>
       /*
        * ─── SPLASH SCREEN ──────────────────────────────────────────────────────────
@@ -179,7 +202,7 @@
       }
     </style>
   </head>
-  <body class="antialiased bg-slate-950 text-slate-100 min-h-screen selection:bg-indigo-500 selection:text-white">
+  <body class="antialiased min-h-screen selection:bg-indigo-500 selection:text-white">
     <!-- ── Splash Screen ── rendered before React hydrates ── -->
     <div id="splash" role="status" aria-label="Loading MiraiQuest">
       <div>

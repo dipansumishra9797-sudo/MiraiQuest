@@ -1,13 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../../store/appStore';
 import { Coins, Coffee, Shirt, Headphones, Users, CheckCircle2, AlertCircle } from 'lucide-react';
 import { CountUp } from '../common/CountUp';
+import { PerksStoreSkeleton } from '../common/Skeletons';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 
 export const RewardsStoreView: React.FC = () => {
-  const { activeStudent, rewardItems, redemptions, redeemReward, isDark } = useApp();
+  const { activeStudent, rewardItems, redemptions, redeemReward, isDark, isSessionReady } = useApp();
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [feedback, setFeedback] = useState<{ success: boolean; message: string } | null>(null);
   const [recentRedeemedId, setRecentRedeemedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 200);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const safeCoins = activeStudent?.coinsBalance ?? 0;
+  const safeItems = Array.isArray(rewardItems) ? rewardItems : [];
 
   const getRewardIcon = (iconName: string) => {
     switch (iconName) {
@@ -34,6 +45,10 @@ export const RewardsStoreView: React.FC = () => {
   const subCardBg = isDark
     ? 'bg-slate-950 border-slate-800'
     : 'bg-slate-50 border-slate-200';
+
+  if (isLoading || !isSessionReady) {
+    return <PerksStoreSkeleton isDark={isDark} />;
+  }
 
   return (
     <div className="space-y-6">

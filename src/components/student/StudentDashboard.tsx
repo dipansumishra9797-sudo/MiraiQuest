@@ -16,6 +16,8 @@ import { StreakFlame, getStreakTier } from '../common/StreakFlame';
 import { StreakMilestoneModal } from './StreakMilestoneModal';
 import { StreakDetailModal } from './StreakDetailModal';
 import { GameStatBadge, LeagueEmblem } from '../common/GameIcons';
+import { ErrorBoundary } from '../common/ErrorBoundary';
+import { DashboardOverviewSkeleton } from '../common/Skeletons';
 import {
   Flame,
   Snowflake,
@@ -51,11 +53,20 @@ export const StudentDashboard: React.FC = () => {
     openProfileModal,
     updateStudentProfile,
     setIsFocusCriticalActive,
+    isSessionReady,
   } = useApp();
 
   const [activeSubTab, setActiveSubTab] = useState<
     'overview' | 'assignments' | 'ledger' | 'badges' | 'coding' | 'peer_help' | 'store' | 'profile'
-  >('overview');
+  >(() => {
+    if (navSection.startsWith('dashboard:')) {
+      const sub = navSection.replace('dashboard:', '');
+      if (['overview', 'assignments', 'ledger', 'badges', 'coding', 'peer_help', 'store', 'profile'].includes(sub)) {
+        return sub as any;
+      }
+    }
+    return 'overview';
+  });
 
   // Synchronize with drawer navigation
   useEffect(() => {
@@ -235,8 +246,13 @@ export const StudentDashboard: React.FC = () => {
     setNavSection(`dashboard:${tabId}`);
   };
 
+  if (!isSessionReady && activeSubTab === 'overview') {
+    return <DashboardOverviewSkeleton isDark={isDark} />;
+  }
+
   return (
-    <div className="space-y-6">
+    <ErrorBoundary fallbackTitle="Student Dashboard Error">
+      <div className="space-y-6">
       {/* Toast */}
       <AnimatePresence>
         {feedbackToast && (
@@ -975,6 +991,7 @@ export const StudentDashboard: React.FC = () => {
         isSimulatedAtRisk={simulatedAtRisk}
         isSimulatedReset={simulatedReset}
       />
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 };

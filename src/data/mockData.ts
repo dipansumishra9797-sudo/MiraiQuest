@@ -14,6 +14,7 @@ import {
   TeamBattle,
   PastTeamBattleMatch,
   XpRule,
+  XpSourceType,
   Assignment,
   AssignmentSubmission,
 } from '../types';
@@ -138,6 +139,19 @@ export const INITIAL_RULES: XpRule[] = [
     lastUpdated: '2026-10-01',
     updatedBy: 'Prof. Priya Nair',
   },
+  {
+    id: 'rule_quest_reward',
+    actionKey: 'quest_reward',
+    label: 'Quest & Chest Milestone Reward',
+    category: 'engagement',
+    xpValue: 50,
+    dailyCap: 10,
+    active: true,
+    description: 'XP awarded from completing verified quests, milestone achievements, and reward chests.',
+    verificationSource: 'MiraiQuest Reward Engine',
+    lastUpdated: '2026-10-01',
+    updatedBy: 'Dean Vikram Rao',
+  },
 ];
 
 export const INITIAL_FACULTY: FacultyProfile[] = [
@@ -145,6 +159,7 @@ export const INITIAL_FACULTY: FacultyProfile[] = [
     id: 'fac_priya_nair',
     name: 'Prof. Priya Nair',
     email: 'priya.nair@msot.edu',
+    phoneNumber: '+91 98765 22110',
     campus: 'HI-Tech',
     department: 'Computer Science & Engineering',
     assignedSections: ['CS-A', 'CS-B'],
@@ -154,6 +169,7 @@ export const INITIAL_FACULTY: FacultyProfile[] = [
     id: 'fac_arvind_sen',
     name: 'Prof. Arvind Sen',
     email: 'arvind.sen@msot.edu',
+    phoneNumber: '+91 98765 22111',
     campus: 'Rathinam',
     department: 'Information Technology',
     assignedSections: ['IT-A', 'CS-B'],
@@ -163,6 +179,7 @@ export const INITIAL_FACULTY: FacultyProfile[] = [
     id: 'fac_meera_joshi',
     name: 'Prof. Meera Joshi',
     email: 'meera.joshi@msot.edu',
+    phoneNumber: '+91 98765 22112',
     campus: 'Rathinam',
     department: 'Computer Science',
     assignedSections: ['CS-C', 'AI-A'],
@@ -172,6 +189,7 @@ export const INITIAL_FACULTY: FacultyProfile[] = [
     id: 'fac_kabir_rao',
     name: 'Prof. Kabir Rao',
     email: 'kabir.rao@msot.edu',
+    phoneNumber: '+91 98765 22113',
     campus: 'JUJ',
     department: 'Electronics & Computer Engineering',
     assignedSections: ['EC-A', 'CS-D'],
@@ -1550,8 +1568,8 @@ export const INITIAL_LEDGER: LedgerEntry[] = [
     date: '2026-10-13',
     actionType: 'test',
     actionKey: 'test_score',
-    sourceDescription: 'Bi-Weekly Test: Python OOP (84% Score -> 42 XP)',
-    points: 42,
+    sourceDescription: 'Bi-Weekly Test: Python OOP (80% Score -> 40 XP)',
+    points: 40,
     status: 'valid',
   },
   {
@@ -1587,66 +1605,137 @@ export const INITIAL_LEDGER: LedgerEntry[] = [
     points: 25,
     status: 'valid',
   },
-
-  // Maya Sharma entries
-  {
-    id: 'led_maya_01',
-    studentId: 'std_maya_sharma',
-    timestamp: '2026-10-12T09:00:00Z',
-    date: '2026-10-12',
-    actionType: 'test',
-    actionKey: 'test_score',
-    sourceDescription: 'Bi-Weekly Test: DSA Algorithms (96% Score -> 48 XP)',
-    points: 48,
-    status: 'valid',
-  },
-  {
-    id: 'led_maya_02',
-    studentId: 'std_maya_sharma',
-    timestamp: '2026-10-12T14:00:00Z',
-    date: '2026-10-12',
-    actionType: 'coding',
-    actionKey: 'solve_coding',
-    sourceDescription: 'Coding Practice: N-Queens Backtracking [HARD]',
-    points: 40,
-    status: 'valid',
-    verificationMetadata: { problemId: 'LC_51' },
-  },
-  {
-    id: 'led_maya_03',
-    studentId: 'std_maya_sharma',
-    timestamp: '2026-10-13T09:30:00Z',
-    date: '2026-10-13',
-    actionType: 'attendance',
-    actionKey: 'attend_class',
-    sourceDescription: 'Class Attendance: CS-201 (Faculty Register)',
-    points: 10,
-    status: 'valid',
-  },
-
-  // Example of a VOIDED ledger entry (showing faculty override in action)
-  {
-    id: 'led_void_sample_01',
-    studentId: 'std_gen_14',
-    timestamp: '2026-10-11T16:45:00Z',
-    date: '2026-10-11',
-    actionType: 'coding',
-    actionKey: 'solve_coding',
-    sourceDescription: 'Coding Practice: Dynamic Programming Knapsack [HARD]',
-    points: 40,
-    status: 'voided',
-    voidedReason: 'Audit review detected copy-pasted submission from public GitHub repo without passing in-class test cases.',
-    voidedBy: 'Prof. Priya Nair',
-    voidedAt: '2026-10-12T10:00:00Z',
-  },
 ];
+
+// Helper to generate full historical ledger entries for any student so sum(valid entries) === totalXp
+function generateLedgerForStudent(student: StudentProfile): LedgerEntry[] {
+  const entries: LedgerEntry[] = [];
+  let remainingXp = student.totalXp;
+  let counter = 1;
+
+  const dates = [
+    '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05',
+    '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-10',
+    '2026-10-11', '2026-10-12', '2026-10-13'
+  ];
+
+  // 1. 7-Day streak bonus if student has >= 7 streak days
+  if (student.streakDays >= 7 && remainingXp >= 50) {
+    entries.push({
+      id: `led_${student.id}_${counter++}`,
+      studentId: student.id,
+      timestamp: '2026-10-13T12:00:00Z',
+      date: '2026-10-13',
+      actionType: 'streak',
+      actionKey: 'streak_7_day',
+      sourceDescription: '7-Day Learning Streak Consistency Bonus',
+      points: 50,
+      status: 'valid',
+    });
+    remainingXp -= 50;
+  }
+
+  // 2. Peer help accepted answers (15 XP each) based on student.acceptedAnswerCount
+  const peerCount = Math.min(student.acceptedAnswerCount || 0, Math.floor(remainingXp / 15));
+  for (let p = 0; p < peerCount; p++) {
+    const d = dates[p % dates.length];
+    entries.push({
+      id: `led_${student.id}_${counter++}`,
+      studentId: student.id,
+      timestamp: `${d}T15:30:00Z`,
+      date: d,
+      actionType: 'peer_help',
+      actionKey: 'peer_help',
+      sourceDescription: `Peer Discussion: Answer accepted for collegiate doubt #${p + 1}`,
+      points: 15,
+      status: 'valid',
+    });
+    remainingXp -= 15;
+  }
+
+  // 3. Learning event templates: attendance, assignments, quizzes, coding, test, club
+  const templates: { actionType: XpSourceType; actionKey: string; points: number; desc: string }[] = [
+    { actionType: 'attendance', actionKey: 'attend_class', points: 10, desc: 'Class Attendance: CS-201 (Biometric Register)' },
+    { actionType: 'classwork', actionKey: 'submit_assignment', points: 20, desc: 'Assignment Submitted: Core Algorithms Lab' },
+    { actionType: 'quiz', actionKey: 'daily_quiz', points: 35, desc: 'Daily Quiz: Weekly Practice (4/5 Correct)' },
+    { actionType: 'coding', actionKey: 'solve_coding', points: 20, desc: 'Coding Practice: Verified Algorithmic Problem [MEDIUM]' },
+    { actionType: 'coding', actionKey: 'solve_coding', points: 40, desc: 'Coding Practice: Verified Dynamic Programming [HARD]' },
+    { actionType: 'attendance', actionKey: 'attend_class', points: 10, desc: 'Class Attendance: PY-102 (Faculty Register)' },
+    { actionType: 'test', actionKey: 'test_score', points: 40, desc: 'Bi-Weekly Test: Algorithms & Complexity (80% Score -> 40 XP)' },
+    { actionType: 'club', actionKey: 'club_activity', points: 25, desc: 'Club Participation: Competitive Coding Sprint' },
+  ];
+
+  let tIdx = 0;
+  while (remainingXp >= 10 && tIdx < templates.length * 8) {
+    const t = templates[tIdx % templates.length];
+    if (remainingXp >= t.points) {
+      const d = dates[tIdx % dates.length];
+      entries.push({
+        id: `led_${student.id}_${counter++}`,
+        studentId: student.id,
+        timestamp: `${d}T${String(9 + (tIdx % 8)).padStart(2, '0')}:00:00Z`,
+        date: d,
+        actionType: t.actionType,
+        actionKey: t.actionKey,
+        sourceDescription: t.desc,
+        points: t.points,
+        status: 'valid',
+      });
+      remainingXp -= t.points;
+    }
+    tIdx++;
+  }
+
+  // 4. Any remaining points (1-9 XP) allocated as academic assessment score
+  if (remainingXp > 0) {
+    const d = dates[dates.length - 1];
+    entries.push({
+      id: `led_${student.id}_${counter++}`,
+      studentId: student.id,
+      timestamp: `${d}T17:00:00Z`,
+      date: d,
+      actionType: 'test',
+      actionKey: 'test_score',
+      sourceDescription: `Academic Assessment Score (${remainingXp * 2}% -> ${remainingXp} XP)`,
+      points: remainingXp,
+      status: 'valid',
+    });
+    remainingXp = 0;
+  }
+
+  return entries;
+}
+
+// Generate matching ledger entries for all other students
+INITIAL_STUDENTS.forEach((student) => {
+  if (student.id !== 'std_rahul_verma') {
+    const studentEntries = generateLedgerForStudent(student);
+    INITIAL_LEDGER.push(...studentEntries);
+  }
+});
+
+// Example of a VOIDED ledger entry (showing faculty override in action)
+INITIAL_LEDGER.push({
+  id: 'led_void_sample_01',
+  studentId: 'std_gen_14',
+  timestamp: '2026-10-11T16:45:00Z',
+  date: '2026-10-11',
+  actionType: 'coding',
+  actionKey: 'solve_coding',
+  sourceDescription: 'Coding Practice: Dynamic Programming Knapsack [HARD]',
+  points: 40,
+  status: 'voided',
+  voidedReason: 'Audit review detected copy-pasted submission from public GitHub repo without passing in-class test cases.',
+  voidedBy: 'Prof. Priya Nair',
+  voidedAt: '2026-10-12T10:00:00Z',
+});
 
 // Active Team Battle: Inter-Campus Weekend Algothon
 export const INITIAL_BATTLES: TeamBattle[] = [
   {
     id: 'battle_intercampus_2026',
     title: 'Inter-Campus Algothon Sprint',
-    description: '4-Campus coding challenge: solve verified algorithmic problems to earn points for your campus.',
+    description: '3-Campus coding challenge: solve verified algorithmic problems to earn points for your campus.',
     type: 'campus_vs_campus',
     startTime: '2026-10-12T00:00:00Z',
     endTime: '2026-10-15T23:59:59Z',
@@ -1794,7 +1883,7 @@ export const PAST_BATTLE_MATCHES: PastTeamBattleMatch[] = [
   },
   {
     id: 'match_past_03',
-    title: 'Inter-Campus Quad-Battle: Rathinam vs JUJ Data Sprint',
+    title: 'Inter-Campus Clash: Rathinam vs JUJ Data Sprint',
     date: 'Oct 04, 2026',
     type: 'campus_vs_campus',
     winnerTeam: {

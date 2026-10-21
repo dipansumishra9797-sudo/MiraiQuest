@@ -18,6 +18,8 @@ import {
   X,
   Sparkles,
 } from 'lucide-react';
+import { AssignmentsSkeleton } from '../common/Skeletons';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 
 interface StudentAssignmentsViewProps {
   onOpenCompilerWithProblem?: (problemId?: string) => void;
@@ -33,7 +35,15 @@ export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
     activeStudent,
     isDark,
     setIsFocusCriticalActive,
+    isSessionReady,
   } = useApp();
+
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Submission modal state
   const [selectedAsgnToSubmit, setSelectedAsgnToSubmit] = useState<Assignment | null>(null);
@@ -49,12 +59,20 @@ export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccessNotice, setSubmitSuccessNotice] = useState<string | null>(null);
 
-  // Filter assignments relevant for this student
-  const relevantAssignments = assignments.filter((a) => {
-    const campusMatches = a.campus === 'All Campuses' || a.campus === activeStudent.campus;
-    const sectionMatches = a.section === 'All Sections' || a.section === activeStudent.section;
+  const safeCampus = activeStudent?.campus || 'All Campuses';
+  const safeSection = activeStudent?.section || 'All Sections';
+
+  // Filter assignments relevant for this student safely
+  const relevantAssignments = (assignments || []).filter((a) => {
+    if (!a) return false;
+    const campusMatches = a.campus === 'All Campuses' || a.campus === safeCampus;
+    const sectionMatches = a.section === 'All Sections' || a.section === safeSection;
     return campusMatches && sectionMatches;
   });
+
+  if (isLoading || !isSessionReady) {
+    return <AssignmentsSkeleton isDark={isDark} />;
+  }
 
   const handleOpenSubmit = (asgn: Assignment) => {
     setSelectedAsgnToSubmit(asgn);

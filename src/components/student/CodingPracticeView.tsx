@@ -1,10 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '../../store/appStore';
 import { CODING_TOPICS, TopicMetadata } from '../../data/codingPracticeCatalog';
 import { runProblemCode, RunSummary } from '../../modules/codeRunner';
 import { SupportedLanguage, getLanguageStarter } from '../../data/codingProblems';
 import { fireConfetti } from '../../utils/confetti';
+import { CodingPracticeSkeleton } from '../common/Skeletons';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 import {
   Code,
   CheckCircle2,
@@ -19,8 +21,8 @@ import {
   HelpCircle,
   Trophy,
   LayoutGrid,
-  Hash,
   Type,
+  Hash,
   Maximize2,
   Repeat,
   ArrowUpDown,
@@ -72,11 +74,23 @@ export const CodingPracticeView: React.FC = () => {
     studentDrafts,
     saveStudentDraft,
     setIsFocusCriticalActive,
+    isSessionReady,
   } = useApp();
 
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 200);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const safeStudentId = activeStudent?.id || '';
+  const safeProblems = Array.isArray(allCodingProblems) ? allCodingProblems : [];
+  const safeSolvedMap = studentSolvedProblems || {};
+
   const solvedIds = useMemo(() => {
-    return new Set(studentSolvedProblems[activeStudent.id] || []);
-  }, [studentSolvedProblems, activeStudent.id]);
+    return new Set(safeSolvedMap[safeStudentId] || []);
+  }, [safeSolvedMap, safeStudentId]);
 
   // Filters
   const [selectedTopicId, setSelectedTopicId] = useState<string>('all');
@@ -123,14 +137,16 @@ export const CodingPracticeView: React.FC = () => {
   // Daily solves count
   const today = new Date().toISOString().split('T')[0];
   const todaySolves = useMemo(() => {
-    return ledger.filter(
+    const safeLedger = Array.isArray(ledger) ? ledger : [];
+    return safeLedger.filter(
       (e) =>
-        e.studentId === activeStudent.id &&
+        e &&
+        e.studentId === safeStudentId &&
         e.actionKey === 'solve_coding' &&
         e.date === today &&
         e.status === 'valid'
     ).length;
-  }, [ledger, activeStudent.id, today]);
+  }, [ledger, safeStudentId, today]);
 
   // Topic Statistics (Solved vs Total)
   const topicStats = useMemo(() => {
@@ -238,7 +254,7 @@ export const CodingPracticeView: React.FC = () => {
       }
 
       // Claim verified solve XP
-      const res = solveCodingProblem(activeStudent.id, activeProblem.id);
+      const res = solveCodingProblem(safeStudentId, activeProblem.id);
       if (res.success) {
         fireConfetti();
         setFeedbackToast({
@@ -279,6 +295,10 @@ export const CodingPracticeView: React.FC = () => {
     });
     setTimeout(() => setFeedbackToast(null), 5000);
   };
+
+  if (isLoading || !isSessionReady) {
+    return <CodingPracticeSkeleton isDark={isDark} />;
+  }
 
   return (
     <div className="space-y-6">

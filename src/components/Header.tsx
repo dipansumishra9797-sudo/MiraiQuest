@@ -39,6 +39,7 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, onOpenQ
     openProfileModal,
     notifications,
     headerPulseTrigger,
+    openLoginModal,
   } = useApp();
 
   const [showRoleMenu, setShowRoleMenu] = useState(false);
@@ -76,8 +77,8 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, onOpenQ
         className={`sticky top-0 z-40 transition-colors ${
           role === 'student'
             ? isDark
-              ? 'bg-slate-950/65 backdrop-blur-xl border-b border-slate-800/60 text-slate-100 shadow-sm'
-              : 'bg-white/70 backdrop-blur-xl border-b border-slate-200/60 text-slate-900 shadow-xs'
+              ? 'bg-slate-950/45 backdrop-blur-2xl border-b border-slate-800/40 text-slate-100 shadow-sm'
+              : 'bg-white/55 backdrop-blur-2xl border-b border-slate-200/50 text-slate-900 shadow-xs'
             : isDark
             ? 'bg-slate-950/90 backdrop-blur-md border-b border-slate-800 text-slate-100'
             : 'bg-white/95 backdrop-blur-md border-b border-slate-200 text-slate-900 shadow-xs'
@@ -103,7 +104,13 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, onOpenQ
             {/* MiraiQuest Logo */}
             <button
               onClick={() => {
-                setNavSection('dashboard:overview');
+                if (role === 'faculty') {
+                  setNavSection('faculty:analytics');
+                } else if (role === 'admin') {
+                  setNavSection('admin:rules');
+                } else {
+                  setNavSection('dashboard:overview');
+                }
                 onTabChange('dashboard');
               }}
               className="text-base sm:text-lg font-bold tracking-tight whitespace-nowrap shrink-0 flex items-center gap-1.5 sm:gap-2 hover:opacity-90 transition-opacity cursor-pointer"
@@ -371,6 +378,19 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onTabChange, onOpenQ
                   </div>
                   {role === 'admin' && <span className="text-[10px] text-indigo-400 font-bold">ACTIVE</span>}
                 </button>
+
+                {/* Direct Phone OTP Login Trigger */}
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 mt-2">
+                  <button
+                    onClick={() => {
+                      setShowRoleMenu(false);
+                      openLoginModal();
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors cursor-pointer shadow-xs"
+                  >
+                    <span>Sign In via Phone OTP</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>

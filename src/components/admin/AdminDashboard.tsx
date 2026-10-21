@@ -4,6 +4,8 @@ import { useApp } from '../../store/appStore';
 import { XpRule, Campus, LeagueTier } from '../../types';
 import { GlobalFilterBar } from '../GlobalFilterBar';
 import { StreakFlame } from '../common/StreakFlame';
+import { DashboardOverviewSkeleton } from '../common/Skeletons';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 import {
   ShieldCheck,
   Sliders,
@@ -52,6 +54,8 @@ export const AdminDashboard: React.FC = () => {
     isDark,
     navSection,
     setNavSection,
+    simulateWeekEnd,
+    isSessionReady,
   } = useApp();
 
   type AdminTab =
@@ -64,7 +68,37 @@ export const AdminDashboard: React.FC = () => {
     | 'rewards'
     | 'users';
 
-  const [activeTab, setActiveTab] = useState<AdminTab>('rules');
+  // Initialize active tab lazily from navSection to prevent refresh tab flashing
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => {
+    if (navSection && navSection.startsWith('admin:')) {
+      const section = navSection.replace('admin:', '') as AdminTab;
+      if (
+        [
+          'rules',
+          'audit_flags',
+          'xp_spikes',
+          'rule_logs',
+          'leagues',
+          'battles',
+          'rewards',
+          'users',
+        ].includes(section)
+      ) {
+        return section;
+      }
+    }
+    return 'rules';
+  });
+
+  const [isLoading, setIsLoading] = useState(!isSessionReady);
+
+  useEffect(() => {
+    if (isSessionReady) {
+      const timer = setTimeout(() => setIsLoading(false), 180);
+      return () => clearTimeout(timer);
+    }
+  }, [isSessionReady]);
+
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [editXpValue, setEditXpValue] = useState<number>(0);
   const [editCap, setEditCap] = useState<number>(0);
@@ -78,7 +112,7 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
 
-    if (navSection.startsWith('admin:')) {
+    if (navSection && navSection.startsWith('admin:')) {
       const section = navSection.replace('admin:', '') as AdminTab;
       if (
         [
@@ -171,8 +205,13 @@ export const AdminDashboard: React.FC = () => {
     );
   });
 
+  if (isLoading) {
+    return <DashboardOverviewSkeleton isDark={isDark} />;
+  }
+
   return (
-    <div className="space-y-6">
+    <ErrorBoundary fallbackTitle="Admin Governance Console Error">
+      <div className="space-y-6">
       {/* Sticky Global Filter Bar */}
       <GlobalFilterBar />
 
@@ -799,6 +838,19 @@ export const AdminDashboard: React.FC = () => {
                 Showing distribution for active filtered cohort ({filteredStudents.length} students). Weekly top 20% promote, bottom 20% relegate.
               </p>
             </div>
+
+            <button
+              onClick={() => {
+                const res = simulateWeekEnd();
+                setNotice(`Week-End Simulation Complete: ${res.promotedCount} students promoted, ${res.relegatedCount} relegated.`);
+                setTimeout(() => setNotice(null), 5000);
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs transition-all shadow-xs cursor-pointer touch-target self-start sm:self-auto"
+              title="Simulate conclusion of weekly competitive league cycle"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Simulate Week End</span>
+            </button>
           </div>
 
           {/* Tier Cards computed from filtered cohort */}
@@ -1206,6 +1258,7 @@ export const AdminDashboard: React.FC = () => {
       )}
 
       {/* End Admin Views */}
-    </div>
+      </div>
+    </ErrorBoundary>
   );
 };
